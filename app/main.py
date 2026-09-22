@@ -8,123 +8,92 @@ from app.code_reader import CodeReader
 from app.documentation_reader import DocumentationReader
 from app.chunker import CodeChunker
 from app.embedder import Embedder
-def main():
+from app.vector_store import VectorStore
 
-    repo_url = input("Enter GitHub repository URL: ")
-
-    loader = RepositoryLoader(repo_url)
-
-    repo_path = loader.clone()
-
-    analyzer = RepositoryAnalyzer(repo_path)
-    report = analyzer.analyze()
-
-    classifier = FileClassifier()
-    # print("\n--- File Classification ---")
-
-    # for file in report.files:
-    #     file_path = repo_path / file
-    #     category = classifier.classify(file_path)
-    #     print(f"{file:50} → {category}")
-
-    detector = TechnologyDetector(repo_path)
-    technologies = detector.detect()
-    environment_analyzer = EnvironmentAnalyzer(repo_path)
-    # print("\nEnvironment files:")
-    # print(environment_analyzer.find_environment_files())
-
-    # print("\nEnvironment variables:")
-    # print(environment_analyzer.find_environment_variables())
-
-    environment_analyzer = EnvironmentAnalyzer(repo_path)
-    environment_report = EnvironmentReport(
-        environment_files=[
-            str(path)
-            for path in environment_analyzer.find_environment_files()
-        ],
+def index_repository():
+    repo_url=input("Enter GitHub repository URL: ")
+    loader=RepositoryLoader(repo_url)
+    repo_path=loader.clone()
+    repository_name=repo_path.name
+    analyzer=RepositoryAnalyzer(repo_path)
+    report=analyzer.analyze()
+    classifier=FileClassifier()
+    detector=TechnologyDetector(repo_path)
+    technologies=detector.detect()
+    environment_analyzer=EnvironmentAnalyzer(repo_path)
+    environment_report=EnvironmentReport(
+        environment_files=[str(path) for path in environment_analyzer.find_environment_files()],
         required_variables=environment_analyzer.find_environment_variables(),
         services=environment_analyzer.find_services(),
     )
-    # print("\nEnvironment Report")
-    # print("------------------")
-
-    # print("Environment files:")
-    # for file in environment_report.environment_files:
-    #     print(f"  - {file}")
-
-    # print("\nRequired variables:")
-    # for variable in environment_report.required_variables:
-    #     print(f"  - {variable}")
-
-    # print("\nServices:")
-    # for service in environment_report.services:
-    #     print(f"  - {service}")
-    reader = CodeReader(repo_path)
-
-    source_files = reader.read_source_files()
-
-    # print("\nSource files:")
-    # for file in source_files:
-    #     print(f"  - {file['path']}")
-
-    report.languages = technologies["languages"]
-    report.frameworks = technologies["frameworks"]
-    report.databases = technologies["databases"]
-    report.tools = technologies["tools"]
-
-    documentation_reader = DocumentationReader(repo_path)
-
-    documents = documentation_reader.read_documents()
-
-    # print("\nDocumentation files:")
-
-    # for document in documents:
-    #     print(f"  - {document['path']}")
-    chunker = CodeChunker(
-    chunk_size=50,
-    overlap=10
-    )
-
-    print("\nCode chunks:")
-
+    reader=CodeReader(repo_path)
+    source_files=reader.read_source_files()
+    report.languages=technologies["languages"]
+    report.frameworks=technologies["frameworks"]
+    report.databases=technologies["databases"]
+    report.tools=technologies["tools"]
+    documentation_reader=DocumentationReader(repo_path)
+    documents=documentation_reader.read_documents()
+    chunker=CodeChunker(chunk_size=50,overlap=10)
+    embedder=Embedder()
+    all_chunks=[]
+    texts=[]
     for file in source_files:
-
-        chunks = chunker.chunk_file(
-            file["path"],
-            file["content"]
-        )
-
-        # print(
-        #     f"\n{file['path']} → "
-        #     f"{len(chunks)} chunks"
-        # )
-
-        # for chunk in chunks[:2]:
-        #     print(
-        #         f"  Lines {chunk.start_line}-"
-        #         f"{chunk.end_line}"
-        #     )
-
-    embedder = Embedder()
-
-    texts = []
-
-    for file in source_files:
-
-        chunks = chunker.chunk_file(
-            file["path"],
-            file["content"]
-        )
-
+        chunks=chunker.chunk_file(file["path"],file["content"])
+        all_chunks.extend(chunks)
         for chunk in chunks:
             texts.append(chunk.content)
+    embeddings=embedder.embed(texts)
+    vector_store=VectorStore()
+    vector_store.add_chunks(all_chunks,embeddings, repository_name)
+    print("Stored chunks:",len(all_chunks))
 
-    embeddings = embedder.embed(texts)
+def search_repository():
+    embedder=Embedder()
+    vector_store=VectorStore()
+    repositories=vector_store.get_repositories()
 
-    print("\nEmbedding information:")
-    print("Number of chunks:", len(texts))
-    print("Embedding shape:", embeddings.shape)
+    if not repositories:
+        print("\nNo repositories have been indexed yet.")
+        return
 
+    print("\nIndexed repositories:")
+    for i,repository in enumerate(repositories,start=1):
+        print(f"{i}. {repository}")
 
-if __name__ == "__main__":
+    choice=input("\nSelect repository: ")
+
+    try:
+        repository_name=repositories[int(choice)-1]
+    except (ValueError,IndexError):
+        print("\nInvalid repository selection.")
+        return
+
+    query=input("\nAsk RepoPilot: ")
+    query_embedding=embedder.embed([query])[0]
+    results=vector_store.search(query_embedding,repository_name,n_results=5)
+
+    if not results["documents"][0]:
+        print(f"\nNo relevant code found in {repository_name}.")
+        return
+
+    print("\nRelevant code:")
+    for i,document in enumerate(results["documents"][0],start=1):
+        metadata=results["metadatas"][0][i-1]
+        print(f"\n{i}. {metadata['file_path']} (lines {metadata['start_line']}-{metadata['end_line']})")
+        print(document[:500])
+
+def main():
+    print("\nRepoPilot")
+    print("1. Index repository")
+    print("2. Search repository")
+    choice=input("\nChoose an option: ")
+    if choice=="1":
+        index_repository()
+    elif choice=="2":
+        search_repository()
+    else:
+        print("Invalid choice.")
+
+if __name__=="__main__":
     main()

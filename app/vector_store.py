@@ -8,7 +8,7 @@ class VectorStore:
     def add_chunks(self,chunks,embeddings,repository_name):
         documents=[chunk.content for chunk in chunks]
         ids=[f"{repository_name}:{chunk.file_path}:{chunk.start_line}" for chunk in chunks]
-        metadatas=[{"repository":repository_name,"file_path":chunk.file_path,"start_line":chunk.start_line,"end_line":chunk.end_line} for chunk in chunks]
+        metadatas=[{"repository":repository_name,"file_path":chunk.file_path,"language":chunk.language,"start_line":chunk.start_line,"end_line":chunk.end_line,"symbol":chunk.symbol or "","symbol_type":chunk.symbol_type or ""} for chunk in chunks]
         self.collection.upsert(ids=ids,documents=documents,embeddings=embeddings.tolist(),metadatas=metadatas)
 
     def search(self, query_embedding, repository_name,n_results=5):

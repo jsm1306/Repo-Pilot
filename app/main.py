@@ -6,7 +6,7 @@ from app.environment import EnvironmentAnalyzer
 from app.models import EnvironmentReport
 from app.code_reader import CodeReader
 from app.documentation_reader import DocumentationReader
-from app.chunker import CodeChunker
+from app.structural_chunker import StructuralChunker
 from app.embedder import Embedder
 from app.vector_store import VectorStore
 
@@ -34,7 +34,7 @@ def index_repository():
     report.tools=technologies["tools"]
     documentation_reader=DocumentationReader(repo_path)
     documents=documentation_reader.read_documents()
-    chunker=CodeChunker(chunk_size=50,overlap=10)
+    chunker=StructuralChunker()
     embedder=Embedder()
     all_chunks=[]
     texts=[]
@@ -71,7 +71,7 @@ def search_repository():
 
     query=input("\nAsk RepoPilot: ")
     query_embedding=embedder.embed([query])[0]
-    results=vector_store.search(query_embedding,repository_name,n_results=5)
+    results=vector_store.search(query_embedding,repository_name,n_results=10)
 
     if not results["documents"][0]:
         print(f"\nNo relevant code found in {repository_name}.")
@@ -80,7 +80,11 @@ def search_repository():
     print("\nRelevant code:")
     for i,document in enumerate(results["documents"][0],start=1):
         metadata=results["metadatas"][0][i-1]
+        symbol=metadata.get("symbol","")
+        symbol_type=metadata.get("symbol_type","")
         print(f"\n{i}. {metadata['file_path']} (lines {metadata['start_line']}-{metadata['end_line']})")
+        if symbol:
+            print(f"   {symbol_type}: {symbol}")
         print(document[:500])
 
 def main():

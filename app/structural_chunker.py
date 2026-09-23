@@ -92,29 +92,46 @@ class StructuralChunker:
             "arrow_function": "function",
         }
 
-        def visit(node):
-            if node.type in symbol_types:
-                start = node.start_point[0] + 1
-                end = node.end_point[0] + 1
-                symbol = self._get_symbol_name(node, content)
+        def visit(node,parent_symbol=None):
+            current_symbol=None
 
-                chunks.append(CodeChunk(
-                    file_path=file_path,
-                    content="\n".join(lines[start - 1:end]),
-                    start_line=start,
-                    end_line=end,
-                    language=language,
-                    symbol=symbol,
-                    symbol_type=symbol_types[node.type]
-                ))
+            if node.type in symbol_types:
+                current_symbol=self._get_symbol_name(node,content)
+
+                if node.type in {"class_declaration","class_definition"}:
+                    start=node.start_point[0]+1
+                    end=node.end_point[0]+1
+                    chunks.append(CodeChunk(
+                        file_path=file_path,
+                        content="\n".join(lines[start-1:end]),
+                        start_line=start,
+                        end_line=end,
+                        language=language,
+                        symbol=current_symbol,
+                        symbol_type="class"
+                    ))
 
             for child in node.children:
-                visit(child)
+                if child.type in {"function_declaration","function_definition","method_definition","arrow_function"}:
+                    start=child.start_point[0]+1
+                    end=child.end_point[0]+1
+                    symbol=self._get_symbol_name(child,content)
+                    chunks.append(CodeChunk(
+                        file_path=file_path,
+                        content="\n".join(lines[start-1:end]),
+                        start_line=start,
+                        end_line=end,
+                        language=language,
+                        symbol=symbol,
+                        symbol_type=symbol_types[child.type]
+                    ))
+                else:
+                    visit(child,current_symbol)
 
         visit(tree.root_node)
 
         return chunks or self._fallback_chunks(file_path, content, language)
-
+    
     def _get_symbol_name(self, node, content):
         for child in node.children:
             if child.type in {"identifier", "property_identifier"}:

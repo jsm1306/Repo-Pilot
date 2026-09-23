@@ -9,6 +9,7 @@ from app.documentation_reader import DocumentationReader
 from app.structural_chunker import StructuralChunker
 from app.embedder import Embedder
 from app.vector_store import VectorStore
+from app.reranker import Reranker
 
 def index_repository():
     repo_url=input("Enter GitHub repository URL: ")
@@ -72,19 +73,24 @@ def search_repository():
     query=input("\nAsk RepoPilot: ")
     query_embedding=embedder.embed([query])[0]
     results=vector_store.search(query_embedding,repository_name,n_results=10)
+    documents=results["documents"][0]
+    metadatas=results["metadatas"][0]
 
     if not results["documents"][0]:
         print(f"\nNo relevant code found in {repository_name}.")
         return
+    # My understanding: Reranks the most genuine relevant docs or pieces of files based on the query
+    reranker=Reranker()
+    ranked=reranker.rerank(query,documents,metadatas,top_k=5)
 
     print("\nRelevant code:")
-    for i,document in enumerate(results["documents"][0],start=1):
-        metadata=results["metadatas"][0][i-1]
+    for i,(document,metadata,score) in enumerate(ranked,start=1):
         symbol=metadata.get("symbol","")
         symbol_type=metadata.get("symbol_type","")
         print(f"\n{i}. {metadata['file_path']} (lines {metadata['start_line']}-{metadata['end_line']})")
         if symbol:
             print(f"   {symbol_type}: {symbol}")
+        print(f"   relevance: {score:.3f}")
         print(document[:500])
 
 def main():

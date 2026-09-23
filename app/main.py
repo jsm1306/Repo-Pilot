@@ -10,6 +10,7 @@ from app.structural_chunker import StructuralChunker
 from app.embedder import Embedder
 from app.vector_store import VectorStore
 from app.reranker import Reranker
+from app.llm import GroqLLM
 
 def index_repository():
     repo_url=input("Enter GitHub repository URL: ")
@@ -82,6 +83,25 @@ def search_repository():
     # My understanding: Reranks the most genuine relevant docs or pieces of files based on the query
     reranker=Reranker()
     ranked=reranker.rerank(query,documents,metadatas,top_k=5)
+    context_parts=[]
+
+    for document,metadata,score in ranked:
+        context_parts.append(
+            f"""File: {metadata['file_path']}
+    Symbol: {metadata.get('symbol','')}
+    Type: {metadata.get('symbol_type','')}
+    Language: {metadata.get('language','')}
+    Lines: {metadata['start_line']}-{metadata['end_line']}
+
+    {document}"""
+        )
+
+    context="\n\n---\n\n".join(context_parts)
+    llm=GroqLLM()
+    answer=llm.generate(query,context)
+
+    print("\nRepoPilot:\n")
+    print(answer)
 
     print("\nRelevant code:")
     for i,(document,metadata,score) in enumerate(ranked,start=1):

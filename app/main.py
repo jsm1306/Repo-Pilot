@@ -10,7 +10,7 @@ from app.structural_chunker import StructuralChunker
 from app.embedder import Embedder
 from app.vector_store import VectorStore
 from app.reranker import Reranker
-from app.llm import GroqLLM
+from app.langchain_llm import RepoPilotLLM
 
 def index_repository():
     repo_url=input("Enter GitHub repository URL: ")
@@ -97,7 +97,7 @@ def search_repository():
         )
 
     context="\n\n---\n\n".join(context_parts)
-    llm=GroqLLM()
+    llm = RepoPilotLLM()
     answer=llm.generate(query,context)
 
     print("\nRepoPilot:\n")

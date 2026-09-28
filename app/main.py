@@ -11,7 +11,7 @@ from app.embedder import Embedder
 from app.vector_store import VectorStore
 from app.reranker import Reranker
 from app.langchain_llm import RepoPilotLLM
-
+from app.langchain_retriever import RepoPilotRetriever
 def index_repository():
     repo_url=input("Enter GitHub repository URL: ")
     loader=RepositoryLoader(repo_url)
@@ -51,7 +51,7 @@ def index_repository():
     print("Stored chunks:",len(all_chunks))
 
 def search_repository():
-    embedder=Embedder()
+    # embedder=Embedder()
     vector_store=VectorStore()
     repositories=vector_store.get_repositories()
 
@@ -72,46 +72,78 @@ def search_repository():
         return
 
     query=input("\nAsk RepoPilot: ")
-    query_embedding=embedder.embed([query])[0]
-    results=vector_store.search(query_embedding,repository_name,n_results=10)
-    documents=results["documents"][0]
-    metadatas=results["metadatas"][0]
+    # query_embedding=embedder.embed([query])[0]
+    # results=vector_store.search(query_embedding,repository_name,n_results=10)
+    # documents=results["documents"][0]
+    # metadatas=results["metadatas"][0]
 
-    if not results["documents"][0]:
-        print(f"\nNo relevant code found in {repository_name}.")
-        return
-    # My understanding: Reranks the most genuine relevant docs or pieces of files based on the query
-    reranker=Reranker()
-    ranked=reranker.rerank(query,documents,metadatas,top_k=5)
-    context_parts=[]
+    # if not results["documents"][0]:
+    #     print(f"\nNo relevant code found in {repository_name}.")
+    #     return
+    # # My understanding: Reranks the most genuine relevant docs or pieces of files based on the query
+    # reranker=Reranker()
+    # ranked=reranker.rerank(query,documents,metadatas,top_k=5)
+    retriever=RepoPilotRetriever(
+    embedder=Embedder(),
+    vector_store=VectorStore(),
+    reranker=Reranker(),
+    repository_name=repository_name
+)
 
-    for document,metadata,score in ranked:
-        context_parts.append(
-            f"""File: {metadata['file_path']}
-    Symbol: {metadata.get('symbol','')}
-    Type: {metadata.get('symbol_type','')}
-    Language: {metadata.get('language','')}
-    Lines: {metadata['start_line']}-{metadata['end_line']}
+    docs=retriever.invoke(query)
+    # context_parts=[]
 
-    {document}"""
-        )
+    # for document,metadata,score in ranked:
+    #     context_parts.append(
+    #         f"""File: {metadata['file_path']}
+    # Symbol: {metadata.get('symbol','')}
+    # Type: {metadata.get('symbol_type','')}
+    # Language: {metadata.get('language','')}
+    # Lines: {metadata['start_line']}-{metadata['end_line']}
 
-    context="\n\n---\n\n".join(context_parts)
-    llm = RepoPilotLLM()
-    answer=llm.generate(query,context)
+    # {document}"""
+    #     )
+
+    # context="\n\n---\n\n".join(context_parts)
+    # context_parts=[]
+
+    # for doc in docs:
+    #     context_parts.append(
+    #         f"""File: {doc.metadata['file_path']}
+    # Symbol: {doc.metadata.get('symbol','')}
+    # Type: {doc.metadata.get('symbol_type','')}
+    # Language: {doc.metadata.get('language','')}
+    # Lines: {doc.metadata['start_line']}-{doc.metadata['end_line']}
+    # {doc.page_content}"""
+    #     )
+
+    # context="\n\n---\n\n".join(context_parts)
+    # llm = RepoPilotLLM()
+    # answer=llm.generate(query,context)
+    llm=RepoPilotLLM()
+    answer=llm.generate_from_documents(query,docs)
 
     print("\nRepoPilot:\n")
     print(answer)
 
     print("\nRelevant code:")
-    for i,(document,metadata,score) in enumerate(ranked,start=1):
-        symbol=metadata.get("symbol","")
-        symbol_type=metadata.get("symbol_type","")
-        print(f"\n{i}. {metadata['file_path']} (lines {metadata['start_line']}-{metadata['end_line']})")
+    # for i,(document,metadata,score) in enumerate(ranked,start=1):
+    #     symbol=metadata.get("symbol","")
+    #     symbol_type=metadata.get("symbol_type","")
+    #     print(f"\n{i}. {metadata['file_path']} (lines {metadata['start_line']}-{metadata['end_line']})")
+    #     if symbol:
+    #         print(f"   {symbol_type}: {symbol}")
+    #     print(f"   relevance: {score:.3f}")
+    #     print(document[:500])
+    for i,doc in enumerate(docs,start=1):
+        symbol=doc.metadata.get("symbol","")
+        symbol_type=doc.metadata.get("symbol_type","")
+        score=doc.metadata.get("reranker_score",0)
+        print(f"\n{i}. {doc.metadata['file_path']} "f"(lines {doc.metadata['start_line']}-{doc.metadata['end_line']})")
         if symbol:
             print(f"   {symbol_type}: {symbol}")
         print(f"   relevance: {score:.3f}")
-        print(document[:500])
+        print(doc.page_content[:500])
 
 def main():
     print("\nRepoPilot")

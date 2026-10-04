@@ -12,6 +12,8 @@ from app.vector_store import VectorStore
 from app.reranker import Reranker
 from app.langchain_llm import RepoPilotLLM
 from app.langchain_retriever import RepoPilotRetriever
+from app.tool_agent import RepoPilotToolAgent
+
 def index_repository():
     repo_url=input("Enter GitHub repository URL: ")
     loader=RepositoryLoader(repo_url)
@@ -51,7 +53,6 @@ def index_repository():
     print("Stored chunks:",len(all_chunks))
 
 def search_repository():
-    # embedder=Embedder()
     vector_store=VectorStore()
     repositories=vector_store.get_repositories()
 
@@ -72,33 +73,19 @@ def search_repository():
         return
 
     query=input("\nAsk RepoPilot: ")
-    retriever=RepoPilotRetriever(
-    embedder=Embedder(),
-    vector_store=VectorStore(),
-    reranker=Reranker(),
-    repository_name=repository_name
-)
 
-    llm=RepoPilotLLM()
-    rag_chain=llm.create_rag_chain(retriever)
+    repository_path=f"repos/{repository_name}"
 
-    answer=rag_chain.invoke(query)
-    docs=retriever.invoke(query)
+    agent=RepoPilotToolAgent(RepoPilotLLM().llm)
+
+    answer=agent.run(
+        query,
+        repository_name,
+        repository_path
+    )
 
     print("\nRepoPilot:\n")
     print(answer)
-
-    print("\nRelevant code:")
-   
-    for i,doc in enumerate(docs,start=1):
-        symbol=doc.metadata.get("symbol","")
-        symbol_type=doc.metadata.get("symbol_type","")
-        score=doc.metadata.get("reranker_score",0)
-        print(f"\n{i}. {doc.metadata['file_path']} "f"(lines {doc.metadata['start_line']}-{doc.metadata['end_line']})")
-        if symbol:
-            print(f"   {symbol_type}: {symbol}")
-        print(f"   relevance: {score:.3f}")
-        print(doc.page_content[:500])
 
 def main():
     print("\nRepoPilot")

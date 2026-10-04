@@ -72,17 +72,6 @@ def search_repository():
         return
 
     query=input("\nAsk RepoPilot: ")
-    # query_embedding=embedder.embed([query])[0]
-    # results=vector_store.search(query_embedding,repository_name,n_results=10)
-    # documents=results["documents"][0]
-    # metadatas=results["metadatas"][0]
-
-    # if not results["documents"][0]:
-    #     print(f"\nNo relevant code found in {repository_name}.")
-    #     return
-    # # My understanding: Reranks the most genuine relevant docs or pieces of files based on the query
-    # reranker=Reranker()
-    # ranked=reranker.rerank(query,documents,metadatas,top_k=5)
     retriever=RepoPilotRetriever(
     embedder=Embedder(),
     vector_store=VectorStore(),
@@ -90,51 +79,17 @@ def search_repository():
     repository_name=repository_name
 )
 
-    docs=retriever.invoke(query)
-    # context_parts=[]
-
-    # for document,metadata,score in ranked:
-    #     context_parts.append(
-    #         f"""File: {metadata['file_path']}
-    # Symbol: {metadata.get('symbol','')}
-    # Type: {metadata.get('symbol_type','')}
-    # Language: {metadata.get('language','')}
-    # Lines: {metadata['start_line']}-{metadata['end_line']}
-
-    # {document}"""
-    #     )
-
-    # context="\n\n---\n\n".join(context_parts)
-    # context_parts=[]
-
-    # for doc in docs:
-    #     context_parts.append(
-    #         f"""File: {doc.metadata['file_path']}
-    # Symbol: {doc.metadata.get('symbol','')}
-    # Type: {doc.metadata.get('symbol_type','')}
-    # Language: {doc.metadata.get('language','')}
-    # Lines: {doc.metadata['start_line']}-{doc.metadata['end_line']}
-    # {doc.page_content}"""
-    #     )
-
-    # context="\n\n---\n\n".join(context_parts)
-    # llm = RepoPilotLLM()
-    # answer=llm.generate(query,context)
     llm=RepoPilotLLM()
-    answer=llm.generate_from_documents(query,docs)
+    rag_chain=llm.create_rag_chain(retriever)
+
+    answer=rag_chain.invoke(query)
+    docs=retriever.invoke(query)
 
     print("\nRepoPilot:\n")
     print(answer)
 
     print("\nRelevant code:")
-    # for i,(document,metadata,score) in enumerate(ranked,start=1):
-    #     symbol=metadata.get("symbol","")
-    #     symbol_type=metadata.get("symbol_type","")
-    #     print(f"\n{i}. {metadata['file_path']} (lines {metadata['start_line']}-{metadata['end_line']})")
-    #     if symbol:
-    #         print(f"   {symbol_type}: {symbol}")
-    #     print(f"   relevance: {score:.3f}")
-    #     print(document[:500])
+   
     for i,doc in enumerate(docs,start=1):
         symbol=doc.metadata.get("symbol","")
         symbol_type=doc.metadata.get("symbol_type","")

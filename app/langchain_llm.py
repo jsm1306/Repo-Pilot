@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
 
 load_dotenv()
 
@@ -36,27 +37,24 @@ User question:
             | StrOutputParser()
         )
 
-    def generate(self, question, context):
-        return self.chain.invoke({
-            "question": question,
-            "context": context
-        })
-    def generate_from_documents(self, question, documents):
-        context_parts = []
-
-        for document in documents:
-            context_parts.append(
-                f"""File: {document.metadata['file_path']}
-    Symbol: {document.metadata.get('symbol', '')}
-    Type: {document.metadata.get('symbol_type', '')}
-    Language: {document.metadata.get('language', '')}
-    Lines: {document.metadata['start_line']}-{document.metadata['end_line']}
-    {document.page_content}"""
+    def create_rag_chain(self, retriever):
+        def format_documents(documents):
+            return "\n\n---\n\n".join(
+                f"""File: {doc.metadata['file_path']}
+Symbol: {doc.metadata.get('symbol', '')}
+Type: {doc.metadata.get('symbol_type', '')}
+Language: {doc.metadata.get('language', '')}
+Lines: {doc.metadata['start_line']}-{doc.metadata['end_line']}
+{doc.page_content}"""
+                for doc in documents
             )
 
-        context = "\n\n---\n\n".join(context_parts)
+        rag_chain = (
+            {
+                "context": retriever | format_documents,
+                "question": RunnablePassthrough()
+            }
+            | self.chain
+        )
 
-        return self.chain.invoke({
-            "question": question,
-            "context": context
-        })
+        return rag_chain

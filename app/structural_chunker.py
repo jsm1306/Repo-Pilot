@@ -51,6 +51,51 @@ class StructuralChunker:
             return self._python_chunks(file_path, content)
 
         return self._tree_sitter_chunks(file_path, content, language)
+    
+    def _add_uncovered_chunks(self, file_path, content, language, chunks):
+        lines = content.splitlines()
+        covered = [False] * len(lines)
+
+        for chunk in chunks:
+            for line_no in range(chunk.start_line - 1, min(chunk.end_line, len(lines))):
+                covered[line_no] = True
+
+        uncovered_chunks = []
+        start = 0
+
+        while start < len(lines):
+            if covered[start]:
+                start += 1
+                continue
+
+            end = start
+            while end < len(lines) and not covered[end]:
+                end += 1
+
+            first = start
+            last = end
+
+            while first < last and not lines[first].strip():
+                first += 1
+            while last > first and not lines[last - 1].strip():
+                last -= 1
+
+            for pos in range(first, last, 50):
+                stop = min(pos + 50, last)
+                uncovered_chunks.append(CodeChunk(
+                    file_path=file_path,
+                    content="\n".join(lines[pos:stop]),
+                    start_line=pos + 1,
+                    end_line=stop,
+                    language=language,
+                    symbol="module_context",
+                    symbol_type="module_context"
+                ))
+
+            start = end
+
+        return chunks + uncovered_chunks
+
 
     def _python_chunks(self, file_path, content):
         try:
@@ -75,7 +120,9 @@ class StructuralChunker:
                     symbol_type="class" if isinstance(node, ast.ClassDef) else "function"
                 ))
 
-        return chunks or self._fallback_chunks(file_path, content, "python")
+        if not chunks:
+            return self._fallback_chunks(file_path, content, "python")
+        return self._add_uncovered_chunks(file_path, content, "python", chunks)
 
     def _tree_sitter_chunks(self, file_path, content, language):
         parser = self.parsers[language]
@@ -130,7 +177,9 @@ class StructuralChunker:
 
         visit(tree.root_node)
 
-        return chunks or self._fallback_chunks(file_path, content, language)
+        if not chunks:
+            return self._fallback_chunks(file_path, content, language)
+        return self._add_uncovered_chunks(file_path, content, language, chunks)
     
     def _get_symbol_name(self, node, content):
         for child in node.children:

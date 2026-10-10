@@ -5,10 +5,12 @@ from langgraph.graph import StateGraph, START, END
 
 class RepoPilotState(TypedDict):
     question: str
+    search_query: str
     context: str
     answer: str
     document_count: int
     relevance_grade: str
+    retry_count: int
 
 
 def format_documents(documents):
@@ -24,7 +26,8 @@ Lines: {doc.metadata.get('start_line', '')}-{doc.metadata.get('end_line', '')}
 
 
 class RepoPilotGraph:
-    
+    MAX_RETRIES = 1
+
     def __init__(self, retriever, llm):
         self.retriever = retriever
         self.llm = llm
@@ -32,31 +35,34 @@ class RepoPilotGraph:
         builder = StateGraph(RepoPilotState)
         builder.add_node("retrieve", self.retrieve)
         builder.add_node("grade", self.grade_relevance)
+        builder.add_node("rewrite", self.rewrite_question)
         builder.add_node("generate", self.generate)
         builder.add_node("fallback", self.fallback)
 
         builder.add_edge(START, "retrieve")
         builder.add_edge("retrieve", "grade")
-
         builder.add_conditional_edges(
             "grade",
             self.route_after_grading,
             {
                 "generate": "generate",
+                "rewrite": "rewrite",
                 "fallback": "fallback"
             }
         )
-
+        builder.add_edge("rewrite", "retrieve")
         builder.add_edge("generate", END)
         builder.add_edge("fallback", END)
-
         self.graph = builder.compile()
 
     def retrieve(self, state: RepoPilotState):
-        documents = self.retriever.invoke(state["question"])
+        query = state["search_query"]
+        documents = self.retriever.invoke(query)
         context = format_documents(documents)
 
-        print(f"\n[LangGraph] Retrieved {len(documents)} chunks:")
+        print(f"\n[LangGraph] Search query: {query}")
+        print(f"[LangGraph] Retrieved {len(documents)} chunks")
+
         for i, doc in enumerate(documents, start=1):
             print(
                 f"\n--- Chunk {i} ---\n"
@@ -67,46 +73,25 @@ class RepoPilotGraph:
                 f"{doc.page_content[:500]}"
             )
 
-        return {
-            "context": context,
-            "document_count": len(documents),
-            "relevance_scores": [
-                float(doc.metadata["reranker_score"])
-                for doc in documents
-                if "reranker_score" in doc.metadata
-            ]
-        }
+        return {"context": context, "document_count": len(documents)}
 
-    
-    
-    def route_after_retrieval(self, state: RepoPilotState):
-        scores = state.get("relevance_scores", [])
-        print(f"\n[LangGraph] Relevance scores: {scores}")
-
-        if scores and max(scores) >= state.get("relevance_threshold", 0.0):
-            print("[LangGraph] Relevant evidence → Generate")
-            return "generate"
-
-        print("[LangGraph] Insufficient evidence → Fallback")
-        return "fallback"
-
-    
     def grade_relevance(self, state: RepoPilotState):
+        if not state["context"].strip():
+            print("\n[LangGraph] No evidence retrieved")
+            return {"relevance_grade": "IRRELEVANT"}
+
         prompt = f"""
             You are a repository evidence relevance evaluator.
 
-            Determine whether the retrieved context contains information
-            that can help answer the user's question.
+            Determine whether the retrieved context contains direct or meaningful
+            evidence that can help answer the original question.
 
-            Return RELEVANT if the context contains direct or meaningful
-            evidence that helps answer the question.
+            Return RELEVANT if useful evidence exists.
+            Return IRRELEVANT if the context is unrelated or contains no useful evidence.
 
-            Return IRRELEVANT if the context is unrelated, merely shares
-            incidental keywords, or does not contain useful evidence.
+            Do not answer the question. Evaluate only the evidence.
 
-            Do not answer the user's question. Evaluate only the evidence.
-
-            Question:
+            Original question:
             {state["question"]}
 
             Retrieved context:
@@ -114,23 +99,56 @@ class RepoPilotGraph:
 
             Return exactly one word: RELEVANT or IRRELEVANT.
             """
-
         response = self.llm.llm.invoke(prompt)
         result = response.content.strip().upper()
-        grade = "RELEVANT" if result.startswith("RELEVANT") and not result.startswith("IRRELEVANT") else "IRRELEVANT"
+        grade = (
+            "RELEVANT"
+            if result.startswith("RELEVANT") and not result.startswith("IRRELEVANT")
+            else "IRRELEVANT"
+        )
 
         print(f"\n[LangGraph] LLM relevance grade: {grade}")
         return {"relevance_grade": grade}
-
 
     def route_after_grading(self, state: RepoPilotState):
         if state["relevance_grade"] == "RELEVANT":
             print("[LangGraph] Relevant evidence → Generate")
             return "generate"
 
-        print("[LangGraph] Irrelevant evidence → Fallback")
+        if state["retry_count"] < self.MAX_RETRIES:
+            print("[LangGraph] Irrelevant evidence → Rewrite and retry")
+            return "rewrite"
+
+        print("[LangGraph] Retry exhausted → Fallback")
         return "fallback"
 
+    def rewrite_question(self, state: RepoPilotState):
+        prompt = f"""
+            You are improving search queries for a code repository retrieval system.
+
+            Rewrite the user's question into a concise query that is more likely to
+            retrieve relevant source code, symbols, filenames, or documentation.
+
+            Preserve the user's intent. Add useful technical terms only when justified.
+            Do not answer the question. Return only the rewritten search query.
+
+            Original question:
+            {state["question"]}
+
+            Previous search query:
+            {state["search_query"]}
+            """
+        response = self.llm.llm.invoke(prompt)
+        rewritten = response.content.strip().strip('"')
+
+        if not rewritten:
+            rewritten = state["question"]
+
+        print(f"[LangGraph] Rewritten query: {rewritten}")
+        return {
+            "search_query": rewritten,
+            "retry_count": state["retry_count"] + 1
+        }
 
     def generate(self, state: RepoPilotState):
         response = self.llm.chain.invoke({
@@ -151,9 +169,11 @@ class RepoPilotGraph:
     def run(self, question: str):
         result = self.graph.invoke({
             "question": question,
+            "search_query": question,
             "context": "",
             "answer": "",
             "document_count": 0,
-            "relevance_grade": ""
+            "relevance_grade": "",
+            "retry_count": 0
         })
         return result["answer"]

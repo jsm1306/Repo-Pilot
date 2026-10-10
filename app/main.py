@@ -13,6 +13,7 @@ from app.reranker import Reranker
 from app.langchain_llm import RepoPilotLLM
 from app.langchain_retriever import RepoPilotRetriever
 from app.tool_agent import RepoPilotToolAgent
+from app.graph import RepoPilotGraph
 
 def index_repository():
     repo_url=input("Enter GitHub repository URL: ")
@@ -72,20 +73,27 @@ def search_repository():
         print("\nInvalid repository selection.")
         return
 
-    query=input("\nAsk RepoPilot: ")
+    query = input("\nAsk RepoPilot: ")
+    embedder = Embedder()
+    reranker = Reranker()
 
-    repository_path=f"repos/{repository_name}"
-
-    agent=RepoPilotToolAgent(RepoPilotLLM().llm)
-
-    answer=agent.run(
-        query,
-        repository_name,
-        repository_path
+    retriever = RepoPilotRetriever(
+        embedder=embedder,
+        vector_store=vector_store,
+        reranker=reranker,
+        repository_name=repository_name
     )
 
-    print("\nRepoPilot:\n")
-    print(answer)
+    llm = RepoPilotLLM()
+    graph = RepoPilotGraph(retriever=retriever, llm=llm)
+
+    try:
+        answer = graph.run(query)
+        print("\nRepoPilot:\n")
+        print(answer)
+    except Exception as e:
+        print(f"\nRepoPilot failed: {type(e).__name__}: {e}")
+
 
 def main():
     print("\nRepoPilot")

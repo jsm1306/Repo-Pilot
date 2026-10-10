@@ -10,7 +10,9 @@ from app.structural_chunker import StructuralChunker
 from app.embedder import Embedder
 from app.vector_store import VectorStore
 from app.reranker import Reranker
-from app.llm import GroqLLM
+from app.langchain_llm import RepoPilotLLM
+from app.langchain_retriever import RepoPilotRetriever
+from app.tool_agent import RepoPilotToolAgent
 
 def index_repository():
     repo_url=input("Enter GitHub repository URL: ")
@@ -51,7 +53,6 @@ def index_repository():
     print("Stored chunks:",len(all_chunks))
 
 def search_repository():
-    embedder=Embedder()
     vector_store=VectorStore()
     repositories=vector_store.get_repositories()
 
@@ -72,46 +73,19 @@ def search_repository():
         return
 
     query=input("\nAsk RepoPilot: ")
-    query_embedding=embedder.embed([query])[0]
-    results=vector_store.search(query_embedding,repository_name,n_results=10)
-    documents=results["documents"][0]
-    metadatas=results["metadatas"][0]
 
-    if not results["documents"][0]:
-        print(f"\nNo relevant code found in {repository_name}.")
-        return
-    # My understanding: Reranks the most genuine relevant docs or pieces of files based on the query
-    reranker=Reranker()
-    ranked=reranker.rerank(query,documents,metadatas,top_k=5)
-    context_parts=[]
+    repository_path=f"repos/{repository_name}"
 
-    for document,metadata,score in ranked:
-        context_parts.append(
-            f"""File: {metadata['file_path']}
-    Symbol: {metadata.get('symbol','')}
-    Type: {metadata.get('symbol_type','')}
-    Language: {metadata.get('language','')}
-    Lines: {metadata['start_line']}-{metadata['end_line']}
+    agent=RepoPilotToolAgent(RepoPilotLLM().llm)
 
-    {document}"""
-        )
-
-    context="\n\n---\n\n".join(context_parts)
-    llm=GroqLLM()
-    answer=llm.generate(query,context)
+    answer=agent.run(
+        query,
+        repository_name,
+        repository_path
+    )
 
     print("\nRepoPilot:\n")
     print(answer)
-
-    print("\nRelevant code:")
-    for i,(document,metadata,score) in enumerate(ranked,start=1):
-        symbol=metadata.get("symbol","")
-        symbol_type=metadata.get("symbol_type","")
-        print(f"\n{i}. {metadata['file_path']} (lines {metadata['start_line']}-{metadata['end_line']})")
-        if symbol:
-            print(f"   {symbol_type}: {symbol}")
-        print(f"   relevance: {score:.3f}")
-        print(document[:500])
 
 def main():
     print("\nRepoPilot")

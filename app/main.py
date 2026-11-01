@@ -14,44 +14,12 @@ from app.langchain_llm import RepoPilotLLM
 from app.langchain_retriever import RepoPilotRetriever
 from app.tool_agent import RepoPilotToolAgent
 from app.graph import RepoPilotGraph
+from app.indexing_service import index_repository as run_indexing
 
 def index_repository():
     repo_url=input("Enter GitHub repository URL: ")
-    loader=RepositoryLoader(repo_url)
-    repo_path=loader.clone()
-    repository_name=repo_path.name
-    analyzer=RepositoryAnalyzer(repo_path)
-    report=analyzer.analyze()
-    classifier=FileClassifier()
-    detector=TechnologyDetector(repo_path)
-    technologies=detector.detect()
-    environment_analyzer=EnvironmentAnalyzer(repo_path)
-    environment_report=EnvironmentReport(
-        environment_files=[str(path) for path in environment_analyzer.find_environment_files()],
-        required_variables=environment_analyzer.find_environment_variables(),
-        services=environment_analyzer.find_services(),
-    )
-    reader=CodeReader(repo_path)
-    source_files=reader.read_source_files()
-    report.languages=technologies["languages"]
-    report.frameworks=technologies["frameworks"]
-    report.databases=technologies["databases"]
-    report.tools=technologies["tools"]
-    documentation_reader=DocumentationReader(repo_path)
-    documents=documentation_reader.read_documents()
-    chunker=StructuralChunker()
-    embedder=Embedder()
-    all_chunks=[]
-    texts=[]
-    for file in source_files:
-        chunks=chunker.chunk_file(file["path"],file["content"])
-        all_chunks.extend(chunks)
-        for chunk in chunks:
-            texts.append(chunk.content)
-    embeddings=embedder.embed(texts)
-    vector_store=VectorStore()
-    vector_store.add_chunks(all_chunks,embeddings, repository_name)
-    print("Stored chunks:",len(all_chunks))
+    result = run_indexing(repo_url)
+    print("Stored chunks:", result["chunk_count"])
 
 def search_repository():
     vector_store=VectorStore()

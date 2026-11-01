@@ -1,0 +1,1580 @@
+{
+ "url": "http://127.0.0.1:5173/",
+ "at": "2026-10-21T16:38:51.251Z",
+ "allow": [],
+ "viewports": [
+  {
+   "width": 1440,
+   "height": 900,
+   "load": "load",
+   "screens": 2,
+   "filled": [
+    0.73,
+    0.76
+   ],
+   "motion": {
+    "elements": 0,
+    "css": 0,
+    "transitions": 0,
+    "scripted": 0,
+    "videos": 0,
+    "playingVideos": 0
+   },
+   "metrics": {
+    "viewport": {
+     "w": 1440,
+     "h": 900
+    },
+    "page": {
+     "height": 1296,
+     "screens": 1.4,
+     "words": 200,
+     "img": 0,
+     "video": 0,
+     "canvas": 0,
+     "svg": 0,
+     "sections": 5,
+     "horizontalOverflow": 0,
+     "overflowCulprits": [],
+     "uiFragments": 0,
+     "uiAbuse": false,
+     "realPictures": 0,
+     "videoCount": 0,
+     "uiPictures": 0,
+     "pictureSamples": [],
+     "blendText": 0,
+     "sideScrollers": 0,
+     "brokenImages": [],
+     "emoji": [],
+     "videosNoPoster": 0
+    },
+    "hero": {
+     "text": "Ask the repository.",
+     "words": 3,
+     "chars": 19,
+     "lines": 1,
+     "size": 32,
+     "vw": 2.2,
+     "font": "Instrument Sans",
+     "weight": 700,
+     "tracking": -0.04,
+     "leading": 1.05,
+     "top": 128,
+     "tag": "h1",
+     "kind": "heading",
+     "align": "left",
+     "position": "left"
+    },
+    "h1": {
+     "text": "Ask the repository.",
+     "words": 3,
+     "lines": 1,
+     "size": 31.7,
+     "font": "Instrument Sans"
+    },
+    "headings": [
+     {
+      "text": "Ask the repository.",
+      "words": 3,
+      "chars": 19,
+      "lines": 1,
+      "size": 31.7,
+      "vw": 2.2,
+      "font": "Instrument Sans",
+      "weight": 700,
+      "tracking": -0.035,
+      "leading": 1.05,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.18,
+      "top": 128,
+      "tag": "h1",
+      "kind": "heading"
+     }
+    ],
+    "headingSummary": {
+     "count": 1,
+     "maxLines": 1,
+     "over2Lines": 0,
+     "statements": 0,
+     "centered": 0,
+     "medianWords": null,
+     "mixedFontHeadings": 0
+    },
+    "type": {
+     "families": [
+      {
+       "family": "Instrument Sans",
+       "share": 0.84,
+       "mono": false
+      },
+      {
+       "family": "DM Mono",
+       "share": 0.16,
+       "mono": true
+      },
+      {
+       "family": "monospace",
+       "share": 0.01,
+       "mono": false
+      }
+     ],
+     "familyCount": 3,
+     "sizes": [
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      22,
+      32
+     ],
+     "sizeCount": 11,
+     "notLoaded": [],
+     "body": {
+      "font": "Instrument Sans",
+      "size": 13.8,
+      "leading": 1.5,
+      "weight": 400,
+      "tracking": 0,
+      "contrast": 5.6
+     },
+     "measureChars": 45,
+     "max": {
+      "size": 31.7,
+      "vw": 2.2,
+      "font": "Instrument Sans",
+      "text": "Ask the repository."
+     },
+     "monoShare": 0.16,
+     "monoProseShare": 0.05,
+     "monoFamilies": [
+      "DM Mono",
+      "monospace"
+     ],
+     "monoSamples": [
+      "main",
+      "lines 28–49",
+      "app/graph.py",
+      "RepoPilotGraph.retrieve",
+      "OK",
+      "OK"
+     ],
+     "microLabels": 0,
+     "microLabelShare": 0,
+     "microSamples": [],
+     "upperShare": 0,
+     "centerShare": 0.16,
+     "smallText": 27
+    },
+    "eyebrows": [],
+    "numbered": [],
+    "color": {
+     "bodyBg": "#f3f1ec",
+     "bodyBgHsl": {
+      "h": 43,
+      "s": 0.23,
+      "l": 0.94
+     },
+     "dark": false,
+     "sectionBgs": [],
+     "textColors": [
+      {
+       "color": "#17201e",
+       "share": 0.24
+      },
+      {
+       "color": "#5d6763",
+       "share": 0.23
+      },
+      {
+       "color": "#68736d",
+       "share": 0.2
+      },
+      {
+       "color": "#1b2924",
+       "share": 0.1
+      },
+      {
+       "color": "#805413",
+       "share": 0.06
+      }
+     ],
+     "button": {
+      "bg": "#e8ece8",
+      "hsl": {
+       "h": 120,
+       "s": 0.1,
+       "l": 0.92
+      },
+      "fg": "#17201e"
+     },
+     "lowContrast": [
+      {
+       "text": "main · 34 files",
+       "ratio": 4.1,
+       "need": 4.5,
+       "size": 11.5,
+       "fg": "#68736d",
+       "bg": "#e8ece8"
+      }
+     ]
+    },
+    "buttons": {
+     "count": 7,
+     "inHero": 6,
+     "radius": 6,
+     "height": 32,
+     "withShadow": 0,
+     "withGradient": 0,
+     "mono": 0,
+     "upper": 0,
+     "heroLabels": [
+      "Shortcuts Ctrl K",
+      "Dark",
+      "R repopilot-core main · 34 files",
+      "Index repository",
+      "Find evidence ↗"
+     ]
+    },
+    "surfaces": {
+     "shadowStatic": 0,
+     "shadowOverlay": 0,
+     "shadowSamples": [],
+     "gradients": 0,
+     "scrims": 0,
+     "gradientSamples": [],
+     "gradientText": 0,
+     "hairlines": 4,
+     "hairlineSamples": [
+      "header.topbar 1440px",
+      "aside.rail 255px",
+      "div.panel-heading 640px",
+      "div.panel-heading 402px"
+     ],
+     "outlinedBoxes": 5,
+     "dashed": 0,
+     "blurred": 0,
+     "roundedBoxes": 6,
+     "boxRadius": 10,
+     "squareMedia": 0,
+     "roundedMedia": 0,
+     "mediaRadius": 0,
+     "textShadow": 0,
+     "cardRows": []
+    },
+    "heroMedia": [],
+    "nav": {
+     "links": 1,
+     "fixed": false,
+     "height": 72,
+     "floatingPill": false,
+     "blur": false
+    },
+    "fontsLoaded": [
+     "dm mono",
+     "instrument sans"
+    ]
+   },
+   "layout": {
+    "viewport": {
+     "w": 1440,
+     "h": 900
+    },
+    "pageH": 1296,
+    "margins": {
+     "left": 16,
+     "right": 58
+    },
+    "sections": [
+     {
+      "sel": "section.composer-section",
+      "tag": "section",
+      "top": 270,
+      "height": 252,
+      "words": 14,
+      "media": 0,
+      "middle": 0,
+      "heading": {
+       "text": "Start an investigation",
+       "size": 18,
+       "tag": "h2"
+      },
+      "left": 333,
+      "right": 78,
+      "textLeft": 333,
+      "textRight": 109,
+      "fullBleed": false,
+      "footer": false,
+      "hero": true,
+      "continues": false,
+      "pinned": false
+     },
+     {
+      "sel": "div.content-grid",
+      "tag": "div",
+      "top": 570,
+      "height": 646,
+      "words": 116,
+      "media": 0,
+      "middle": 213,
+      "heading": {
+       "text": "•••",
+       "size": 22,
+       "tag": "span"
+      },
+      "left": 334,
+      "right": 79,
+      "textLeft": 334,
+      "textRight": 79,
+      "fullBleed": false,
+      "footer": true,
+      "hero": false,
+      "continues": false,
+      "pinned": false
+     }
+    ],
+    "gaps": [],
+    "h1s": [
+     {
+      "text": "Ask the repository.",
+      "size": 32,
+      "top": 128,
+      "firstScreen": true
+     }
+    ],
+    "edgeText": [],
+    "edges": [
+     {
+      "x": 334,
+      "n": 3
+     },
+     {
+      "x": 313,
+      "n": 2
+     },
+     {
+      "x": 999,
+      "n": 2
+     }
+    ],
+    "leftBlocks": 7,
+    "bodySize": 12,
+    "stage": false,
+    "explains": false,
+    "slivers": [],
+    "voidShare": 0.11,
+    "voidBox": {
+     "x": 0,
+     "y": 420,
+     "w": 300,
+     "h": 480
+    }
+   },
+   "app": {
+    "viewport": {
+     "w": 1440,
+     "h": 900
+    },
+    "dark": false,
+    "ground": "#f3f1ec",
+    "sidebar": {
+     "w": 255,
+     "tag": "aside",
+     "links": 6,
+     "share": 0.18
+    },
+    "topbar": {
+     "h": 72
+    },
+    "canvas": {
+     "left": 58,
+     "right": 41
+    },
+    "hero": {
+     "text": "Ask the repository.",
+     "words": 3,
+     "chars": 19,
+     "lines": 1,
+     "size": 32,
+     "vw": 2.2,
+     "font": "Instrument Sans",
+     "weight": 700,
+     "tracking": -0.04,
+     "leading": 1.05,
+     "top": 128,
+     "tag": "h1",
+     "kind": "heading",
+     "align": "left",
+     "position": "left"
+    },
+    "charts": 0,
+    "layout": {
+     "panels": 6,
+     "firstScreen": 5,
+     "ragged": [
+      {
+       "diff": 112,
+       "top": 570
+      }
+     ],
+     "voids": []
+    },
+    "tiles": 0,
+    "panels": {
+     "count": 8,
+     "radii": [
+      [
+       10,
+       5
+      ],
+      [
+       0,
+       2
+      ],
+      [
+       5,
+       1
+      ]
+     ],
+     "heavyBorders": 0,
+     "borderSamples": [],
+     "heavyShadows": 0,
+     "softShadows": 0,
+     "shadowSamples": [],
+     "glass": 0
+    },
+    "chips": {
+     "count": 0,
+     "hues": 0,
+     "samples": []
+    },
+    "numbers": {
+     "cells": 0,
+     "leftAligned": 0,
+     "figures": 4,
+     "tabularShare": 0,
+     "kpiMax": 11.36
+    },
+    "rows": null,
+    "chartHues": 0,
+    "placeholders": [],
+    "type": {
+     "under13": 0.52,
+     "tiny": 1,
+     "tinySamples": [
+      "Now 10px"
+     ],
+     "sizes": [
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      22,
+      32
+     ]
+    },
+    "title": {
+     "text": "Ask the repository.",
+     "size": 32,
+     "top": 128
+    },
+    "colourShare": 0.004
+   },
+   "consoleErrors": []
+  },
+  {
+   "width": 768,
+   "height": 1024,
+   "load": "load",
+   "screens": 2,
+   "filled": [
+    0.73,
+    0.89
+   ],
+   "motion": {
+    "elements": 0,
+    "css": 0,
+    "transitions": 0,
+    "scripted": 0,
+    "videos": 0,
+    "playingVideos": 0
+   },
+   "metrics": {
+    "viewport": {
+     "w": 768,
+     "h": 1024
+    },
+    "page": {
+     "height": 1896,
+     "screens": 1.9,
+     "words": 157,
+     "img": 0,
+     "video": 0,
+     "canvas": 0,
+     "svg": 0,
+     "sections": 5,
+     "horizontalOverflow": 0,
+     "overflowCulprits": [],
+     "uiFragments": 0,
+     "uiAbuse": false,
+     "realPictures": 0,
+     "videoCount": 0,
+     "uiPictures": 0,
+     "pictureSamples": [],
+     "blendText": 0,
+     "sideScrollers": 0,
+     "brokenImages": [],
+     "emoji": [],
+     "videosNoPoster": 0
+    },
+    "hero": {
+     "text": "Ask the repository.",
+     "words": 3,
+     "chars": 19,
+     "lines": 1,
+     "size": 32,
+     "vw": 4.2,
+     "font": "Instrument Sans",
+     "weight": 700,
+     "tracking": -0.04,
+     "leading": 1.05,
+     "top": 104,
+     "tag": "h1",
+     "kind": "heading",
+     "align": "left",
+     "position": "left"
+    },
+    "h1": {
+     "text": "Ask the repository.",
+     "words": 3,
+     "lines": 1,
+     "size": 32,
+     "font": "Instrument Sans"
+    },
+    "headings": [
+     {
+      "text": "Ask the repository.",
+      "words": 3,
+      "chars": 19,
+      "lines": 1,
+      "size": 32,
+      "vw": 4.2,
+      "font": "Instrument Sans",
+      "weight": 700,
+      "tracking": -0.035,
+      "leading": 1.05,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.34,
+      "top": 104,
+      "tag": "h1",
+      "kind": "heading"
+     }
+    ],
+    "headingSummary": {
+     "count": 1,
+     "maxLines": 1,
+     "over2Lines": 0,
+     "statements": 0,
+     "centered": 0,
+     "medianWords": null,
+     "mixedFontHeadings": 0
+    },
+    "type": {
+     "families": [
+      {
+       "family": "Instrument Sans",
+       "share": 0.81,
+       "mono": false
+      },
+      {
+       "family": "DM Mono",
+       "share": 0.18,
+       "mono": true
+      },
+      {
+       "family": "monospace",
+       "share": 0.01,
+       "mono": false
+      }
+     ],
+     "familyCount": 3,
+     "sizes": [
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      22,
+      32
+     ],
+     "sizeCount": 11,
+     "notLoaded": [],
+     "body": {
+      "font": "Instrument Sans",
+      "size": 13.8,
+      "leading": 1.5,
+      "weight": 400,
+      "tracking": 0,
+      "contrast": 5.6
+     },
+     "measureChars": 45,
+     "max": {
+      "size": 32,
+      "vw": 4.2,
+      "font": "Instrument Sans",
+      "text": "Ask the repository."
+     },
+     "monoShare": 0.19,
+     "monoProseShare": 0.05,
+     "monoFamilies": [
+      "DM Mono",
+      "monospace"
+     ],
+     "monoSamples": [
+      "lines 28–49",
+      "app/graph.py",
+      "RepoPilotGraph.retrieve",
+      "OK",
+      "OK",
+      "Now"
+     ],
+     "microLabels": 0,
+     "microLabelShare": 0,
+     "microSamples": [],
+     "upperShare": 0,
+     "centerShare": 0.18,
+     "smallText": 19
+    },
+    "eyebrows": [],
+    "numbered": [],
+    "color": {
+     "bodyBg": "#f3f1ec",
+     "bodyBgHsl": {
+      "h": 43,
+      "s": 0.23,
+      "l": 0.94
+     },
+     "dark": false,
+     "sectionBgs": [
+      {
+       "color": "#fbfaf7",
+       "top": 639,
+       "hsl": {
+        "h": 45,
+        "s": 0.33,
+        "l": 0.98
+       }
+      }
+     ],
+     "textColors": [
+      {
+       "color": "#5d6763",
+       "share": 0.22
+      },
+      {
+       "color": "#17201e",
+       "share": 0.22
+      },
+      {
+       "color": "#68736d",
+       "share": 0.15
+      },
+      {
+       "color": "#1b2924",
+       "share": 0.13
+      },
+      {
+       "color": "#805413",
+       "share": 0.08
+      }
+     ],
+     "button": {
+      "bg": "#dbaa97",
+      "hsl": {
+       "h": 17,
+       "s": 0.49,
+       "l": 0.73
+      },
+      "fg": "#fffaf3"
+     },
+     "lowContrast": []
+    },
+    "buttons": {
+     "count": 4,
+     "inHero": 4,
+     "radius": 6,
+     "height": 32,
+     "withShadow": 0,
+     "withGradient": 0,
+     "mono": 0,
+     "upper": 0,
+     "heroLabels": [
+      "Dark",
+      "Index repository",
+      "Find evidence ↗",
+      "Open source ↗"
+     ]
+    },
+    "surfaces": {
+     "shadowStatic": 0,
+     "shadowOverlay": 0,
+     "shadowSamples": [],
+     "gradients": 0,
+     "scrims": 0,
+     "gradientSamples": [],
+     "gradientText": 0,
+     "hairlines": 3,
+     "hairlineSamples": [
+      "header.topbar 768px",
+      "div.panel-heading 734px",
+      "div.panel-heading 734px"
+     ],
+     "outlinedBoxes": 5,
+     "dashed": 0,
+     "blurred": 0,
+     "roundedBoxes": 6,
+     "boxRadius": 10,
+     "squareMedia": 0,
+     "roundedMedia": 0,
+     "mediaRadius": 0,
+     "textShadow": 0,
+     "cardRows": []
+    },
+    "heroMedia": [],
+    "nav": {
+     "links": 1,
+     "fixed": false,
+     "height": 64,
+     "floatingPill": false,
+     "blur": false
+    },
+    "fontsLoaded": [
+     "dm mono",
+     "instrument sans"
+    ]
+   },
+   "layout": {
+    "viewport": {
+     "w": 768,
+     "h": 1024
+    },
+    "pageH": 1896,
+    "margins": {
+     "left": 16,
+     "right": 20
+    },
+    "sections": [
+     {
+      "sel": "div.page-heading",
+      "tag": "div",
+      "top": 104,
+      "height": 164,
+      "words": 15,
+      "media": 0,
+      "middle": 0,
+      "heading": null,
+      "left": 16,
+      "right": 16,
+      "textLeft": 16,
+      "textRight": 335,
+      "fullBleed": false,
+      "footer": false,
+      "hero": true,
+      "continues": false,
+      "pinned": false
+     },
+     {
+      "sel": "section.composer-section",
+      "tag": "section",
+      "top": 308,
+      "height": 283,
+      "words": 14,
+      "media": 0,
+      "middle": 0,
+      "heading": {
+       "text": "Start an investigation",
+       "size": 18,
+       "tag": "h2"
+      },
+      "left": 36,
+      "right": 36,
+      "textLeft": 36,
+      "textRight": 350,
+      "fullBleed": false,
+      "footer": false,
+      "hero": true,
+      "continues": false,
+      "pinned": false
+     },
+     {
+      "sel": "div.content-grid",
+      "tag": "div",
+      "top": 639,
+      "height": 1193,
+      "words": 116,
+      "media": 0,
+      "middle": 92,
+      "heading": {
+       "text": "Source evidence",
+       "size": 15,
+       "tag": "h2"
+      },
+      "left": 33,
+      "right": 33,
+      "textLeft": 33,
+      "textRight": 33,
+      "fullBleed": false,
+      "footer": true,
+      "hero": false,
+      "continues": false,
+      "pinned": false
+     }
+    ],
+    "gaps": [],
+    "h1s": [
+     {
+      "text": "Ask the repository.",
+      "size": 32,
+      "top": 104,
+      "firstScreen": true
+     }
+    ],
+    "edgeText": [],
+    "edges": [
+     {
+      "x": 37,
+      "n": 4
+     },
+     {
+      "x": 16,
+      "n": 2
+     },
+     {
+      "x": 47,
+      "n": 1
+     }
+    ],
+    "leftBlocks": 7,
+    "bodySize": 12,
+    "stage": false,
+    "explains": false,
+    "slivers": [],
+    "voidShare": 0,
+    "voidBox": null
+   },
+   "app": {
+    "viewport": {
+     "w": 768,
+     "h": 1024
+    },
+    "dark": false,
+    "ground": "#f3f1ec",
+    "sidebar": null,
+    "topbar": {
+     "h": 64
+    },
+    "canvas": {
+     "left": 16,
+     "right": 20
+    },
+    "hero": {
+     "text": "Ask the repository.",
+     "words": 3,
+     "chars": 19,
+     "lines": 1,
+     "size": 32,
+     "vw": 4.2,
+     "font": "Instrument Sans",
+     "weight": 700,
+     "tracking": -0.04,
+     "leading": 1.05,
+     "top": 104,
+     "tag": "h1",
+     "kind": "heading",
+     "align": "left",
+     "position": "left"
+    },
+    "charts": 0,
+    "layout": {
+     "panels": 5,
+     "firstScreen": 2,
+     "ragged": [],
+     "voids": []
+    },
+    "tiles": 0,
+    "panels": {
+     "count": 6,
+     "radii": [
+      [
+       10,
+       5
+      ],
+      [
+       5,
+       1
+      ]
+     ],
+     "heavyBorders": 0,
+     "borderSamples": [],
+     "heavyShadows": 0,
+     "softShadows": 0,
+     "shadowSamples": [],
+     "glass": 0
+    },
+    "chips": {
+     "count": 0,
+     "hues": 0,
+     "samples": []
+    },
+    "numbers": {
+     "cells": 0,
+     "leftAligned": 0,
+     "figures": 4,
+     "tabularShare": 0,
+     "kpiMax": 11.36
+    },
+    "rows": null,
+    "chartHues": 0,
+    "placeholders": [],
+    "type": {
+     "under13": 0.53,
+     "tiny": 1,
+     "tinySamples": [
+      "Now 10px"
+     ],
+     "sizes": [
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      22,
+      32
+     ]
+    },
+    "title": {
+     "text": "Ask the repository.",
+     "size": 32,
+     "top": 104
+    },
+    "colourShare": 0.032
+   },
+   "consoleErrors": []
+  },
+  {
+   "width": 390,
+   "height": 844,
+   "load": "load",
+   "screens": 3,
+   "filled": [
+    0.68,
+    0.79,
+    0.79
+   ],
+   "motion": {
+    "elements": 0,
+    "css": 0,
+    "transitions": 0,
+    "scripted": 0,
+    "videos": 0,
+    "playingVideos": 0
+   },
+   "metrics": {
+    "viewport": {
+     "w": 390,
+     "h": 844
+    },
+    "page": {
+     "height": 1929,
+     "screens": 2.3,
+     "words": 157,
+     "img": 0,
+     "video": 0,
+     "canvas": 0,
+     "svg": 0,
+     "sections": 5,
+     "horizontalOverflow": 0,
+     "overflowCulprits": [],
+     "uiFragments": 0,
+     "uiAbuse": false,
+     "realPictures": 0,
+     "videoCount": 0,
+     "uiPictures": 0,
+     "pictureSamples": [],
+     "blendText": 0,
+     "sideScrollers": 0,
+     "brokenImages": [],
+     "emoji": [],
+     "videosNoPoster": 0
+    },
+    "hero": {
+     "text": "Ask the repository.",
+     "words": 3,
+     "chars": 19,
+     "lines": 1,
+     "size": 31,
+     "vw": 8,
+     "font": "Instrument Sans",
+     "weight": 700,
+     "tracking": -0.04,
+     "leading": 1.05,
+     "top": 104,
+     "tag": "h1",
+     "kind": "heading",
+     "align": "left",
+     "position": "left"
+    },
+    "h1": {
+     "text": "Ask the repository.",
+     "words": 3,
+     "lines": 1,
+     "size": 31.2,
+     "font": "Instrument Sans"
+    },
+    "headings": [
+     {
+      "text": "Ask the repository.",
+      "words": 3,
+      "chars": 19,
+      "lines": 1,
+      "size": 31.2,
+      "vw": 8,
+      "font": "Instrument Sans",
+      "weight": 700,
+      "tracking": -0.035,
+      "leading": 1.05,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.65,
+      "top": 104,
+      "tag": "h1",
+      "kind": "heading"
+     },
+     {
+      "text": "•••",
+      "words": 1,
+      "chars": 3,
+      "lines": 1,
+      "size": 22.4,
+      "vw": 5.7,
+      "font": "Instrument Sans",
+      "weight": 400,
+      "tracking": 0,
+      "leading": 1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "center",
+      "position": "center",
+      "widthRatio": 0.1,
+      "top": 1388,
+      "tag": "span",
+      "kind": "heading"
+     }
+    ],
+    "headingSummary": {
+     "count": 2,
+     "maxLines": 1,
+     "over2Lines": 0,
+     "statements": 0,
+     "centered": 1,
+     "medianWords": 1,
+     "mixedFontHeadings": 0
+    },
+    "type": {
+     "families": [
+      {
+       "family": "Instrument Sans",
+       "share": 0.81,
+       "mono": false
+      },
+      {
+       "family": "DM Mono",
+       "share": 0.18,
+       "mono": true
+      },
+      {
+       "family": "monospace",
+       "share": 0.01,
+       "mono": false
+      }
+     ],
+     "familyCount": 3,
+     "sizes": [
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      22,
+      31
+     ],
+     "sizeCount": 11,
+     "notLoaded": [],
+     "body": {
+      "font": "Instrument Sans",
+      "size": 13.8,
+      "leading": 1.5,
+      "weight": 400,
+      "tracking": 0,
+      "contrast": 5.6
+     },
+     "measureChars": 45,
+     "max": {
+      "size": 31.2,
+      "vw": 8,
+      "font": "Instrument Sans",
+      "text": "Ask the repository."
+     },
+     "monoShare": 0.19,
+     "monoProseShare": 0.05,
+     "monoFamilies": [
+      "DM Mono",
+      "monospace"
+     ],
+     "monoSamples": [
+      "lines 28–49",
+      "app/graph.py",
+      "RepoPilotGraph.retrieve",
+      "OK",
+      "OK",
+      "Now"
+     ],
+     "microLabels": 0,
+     "microLabelShare": 0,
+     "microSamples": [],
+     "upperShare": 0,
+     "centerShare": 0.18,
+     "smallText": 19
+    },
+    "eyebrows": [],
+    "numbered": [],
+    "color": {
+     "bodyBg": "#f3f1ec",
+     "bodyBgHsl": {
+      "h": 43,
+      "s": 0.23,
+      "l": 0.94
+     },
+     "dark": false,
+     "sectionBgs": [
+      {
+       "color": "#fbfaf7",
+       "top": 1558,
+       "hsl": {
+        "h": 45,
+        "s": 0.33,
+        "l": 0.98
+       }
+      }
+     ],
+     "textColors": [
+      {
+       "color": "#5d6763",
+       "share": 0.22
+      },
+      {
+       "color": "#17201e",
+       "share": 0.22
+      },
+      {
+       "color": "#68736d",
+       "share": 0.15
+      },
+      {
+       "color": "#1b2924",
+       "share": 0.13
+      },
+      {
+       "color": "#805413",
+       "share": 0.08
+      }
+     ],
+     "button": {
+      "bg": "#dbaa97",
+      "hsl": {
+       "h": 17,
+       "s": 0.49,
+       "l": 0.73
+      },
+      "fg": "#fffaf3"
+     },
+     "lowContrast": []
+    },
+    "buttons": {
+     "count": 4,
+     "inHero": 3,
+     "radius": 6,
+     "height": 32,
+     "withShadow": 0,
+     "withGradient": 0,
+     "mono": 0,
+     "upper": 0,
+     "heroLabels": [
+      "Dark",
+      "Index repository",
+      "Find evidence ↗"
+     ]
+    },
+    "surfaces": {
+     "shadowStatic": 0,
+     "shadowOverlay": 0,
+     "shadowSamples": [],
+     "gradients": 0,
+     "scrims": 0,
+     "gradientSamples": [],
+     "gradientText": 0,
+     "hairlines": 3,
+     "hairlineSamples": [
+      "header.topbar 390px",
+      "div.panel-heading 356px",
+      "div.panel-heading 356px"
+     ],
+     "outlinedBoxes": 5,
+     "dashed": 0,
+     "blurred": 0,
+     "roundedBoxes": 6,
+     "boxRadius": 10,
+     "squareMedia": 0,
+     "roundedMedia": 0,
+     "mediaRadius": 0,
+     "textShadow": 0,
+     "cardRows": []
+    },
+    "heroMedia": [],
+    "nav": {
+     "links": 1,
+     "fixed": false,
+     "height": 64,
+     "floatingPill": false,
+     "blur": false
+    },
+    "fontsLoaded": [
+     "dm mono",
+     "instrument sans"
+    ]
+   },
+   "layout": {
+    "viewport": {
+     "w": 390,
+     "h": 844
+    },
+    "pageH": 1929,
+    "margins": {
+     "left": 16,
+     "right": 20
+    },
+    "sections": [
+     {
+      "sel": "div.page-heading",
+      "tag": "div",
+      "top": 104,
+      "height": 164,
+      "words": 15,
+      "media": 0,
+      "middle": 0,
+      "heading": null,
+      "left": 16,
+      "right": 16,
+      "textLeft": 16,
+      "textRight": 24,
+      "fullBleed": false,
+      "footer": false,
+      "hero": true,
+      "continues": false,
+      "pinned": false
+     },
+     {
+      "sel": "section.composer-section",
+      "tag": "section",
+      "top": 308,
+      "height": 283,
+      "words": 14,
+      "media": 0,
+      "middle": 0,
+      "heading": {
+       "text": "Start an investigation",
+       "size": 18,
+       "tag": "h2"
+      },
+      "left": 36,
+      "right": 36,
+      "textLeft": 36,
+      "textRight": 72,
+      "fullBleed": false,
+      "footer": false,
+      "hero": true,
+      "continues": false,
+      "pinned": false
+     },
+     {
+      "sel": "div.content-grid",
+      "tag": "div",
+      "top": 638,
+      "height": 1227,
+      "words": 116,
+      "media": 0,
+      "middle": 0,
+      "heading": {
+       "text": "Source evidence",
+       "size": 15,
+       "tag": "h2"
+      },
+      "left": 33,
+      "right": 33,
+      "textLeft": 33,
+      "textRight": 33,
+      "fullBleed": false,
+      "footer": true,
+      "hero": false,
+      "continues": false,
+      "pinned": false
+     }
+    ],
+    "gaps": [],
+    "h1s": [
+     {
+      "text": "Ask the repository.",
+      "size": 31,
+      "top": 104,
+      "firstScreen": true
+     }
+    ],
+    "edgeText": [],
+    "edges": [
+     {
+      "x": 37,
+      "n": 4
+     },
+     {
+      "x": 16,
+      "n": 2
+     },
+     {
+      "x": 47,
+      "n": 1
+     }
+    ],
+    "leftBlocks": 7,
+    "bodySize": 12,
+    "stage": false,
+    "explains": false,
+    "slivers": [],
+    "voidShare": 0,
+    "voidBox": null
+   },
+   "app": {
+    "viewport": {
+     "w": 390,
+     "h": 844
+    },
+    "dark": false,
+    "ground": "#f3f1ec",
+    "sidebar": null,
+    "topbar": {
+     "h": 64
+    },
+    "canvas": {
+     "left": 16,
+     "right": 20
+    },
+    "hero": {
+     "text": "Ask the repository.",
+     "words": 3,
+     "chars": 19,
+     "lines": 1,
+     "size": 31,
+     "vw": 8,
+     "font": "Instrument Sans",
+     "weight": 700,
+     "tracking": -0.04,
+     "leading": 1.05,
+     "top": 104,
+     "tag": "h1",
+     "kind": "heading",
+     "align": "left",
+     "position": "left"
+    },
+    "charts": 0,
+    "layout": {
+     "panels": 5,
+     "firstScreen": 2,
+     "ragged": [],
+     "voids": []
+    },
+    "tiles": 0,
+    "panels": {
+     "count": 8,
+     "radii": [
+      [
+       10,
+       5
+      ],
+      [
+       6,
+       2
+      ],
+      [
+       5,
+       1
+      ]
+     ],
+     "heavyBorders": 0,
+     "borderSamples": [],
+     "heavyShadows": 0,
+     "softShadows": 0,
+     "shadowSamples": [],
+     "glass": 0
+    },
+    "chips": {
+     "count": 0,
+     "hues": 0,
+     "samples": []
+    },
+    "numbers": {
+     "cells": 0,
+     "leftAligned": 0,
+     "figures": 4,
+     "tabularShare": 0,
+     "kpiMax": 11.36
+    },
+    "rows": null,
+    "chartHues": 0,
+    "placeholders": [],
+    "type": {
+     "under13": 0.53,
+     "tiny": 1,
+     "tinySamples": [
+      "Now 10px"
+     ],
+     "sizes": [
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      22,
+      31
+     ]
+    },
+    "title": {
+     "text": "Ask the repository.",
+     "size": 31,
+     "top": 104
+    },
+    "colourShare": 0.034
+   },
+   "consoleErrors": []
+  }
+ ],
+ "findings": [
+  {
+   "level": "WARN",
+   "id": "palette-cream",
+   "width": 1440,
+   "message": "Yellow-cream background (page background #f3f1ec).",
+   "fix": "Use the drawn palette. If you want warmth, take a low-chroma stone or bone, not a yellow cream.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "WARN",
+   "id": "contrast",
+   "width": 1440,
+   "message": "Low-contrast text: \"main · 34 files\" 4.1:1 needs 4.5:1",
+   "fix": "Darken or lighten the text colour."
+  },
+  {
+   "level": "WARN",
+   "id": "tiny-text",
+   "width": 1440,
+   "message": "52% of the text is under 13px.",
+   "fix": "Data and labels read at 13–14px; keep 11–12px for sublines and axis ticks.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "WARN",
+   "id": "ragged-row",
+   "width": 1440,
+   "message": "1 pair(s) of cards in one row end at different heights (by 112px).",
+   "fix": "Cards that share a row share a bottom edge: balance them by their content (the same number of rows, a block of similar height beside it), or stack them. In testing, ragged rows were marked down every time."
+  },
+  {
+   "level": "WARN",
+   "id": "app-title-size",
+   "width": 390,
+   "message": "The h1 is 31px (\"Ask the repository.\").",
+   "fix": "An app screen is not a landing page: the title is 18-32px (20-24px on a phone)."
+  }
+ ],
+ "images": [
+  {
+   "viewport": "desktop",
+   "width": 1440,
+   "fold": "S:\\Repo-Pilot\\.taste-skill\\inspect\\desktop-fold.jpg",
+   "pages": [
+    "S:\\Repo-Pilot\\.taste-skill\\inspect\\desktop-page-01.jpg"
+   ],
+   "film": []
+  },
+  {
+   "viewport": "tablet",
+   "width": 768,
+   "fold": "S:\\Repo-Pilot\\.taste-skill\\inspect\\tablet-fold.jpg",
+   "pages": [
+    "S:\\Repo-Pilot\\.taste-skill\\inspect\\tablet-page-01.jpg"
+   ],
+   "film": []
+  },
+  {
+   "viewport": "mobile",
+   "width": 390,
+   "fold": "S:\\Repo-Pilot\\.taste-skill\\inspect\\mobile-fold.jpg",
+   "pages": [
+    "S:\\Repo-Pilot\\.taste-skill\\inspect\\mobile-page-01.jpg"
+   ],
+   "film": []
+  }
+ ]
+}

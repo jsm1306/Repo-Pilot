@@ -1,5 +1,6 @@
 
-from typing import TypedDict
+from collections.abc import Callable
+from typing import Any, TypedDict
 from langgraph.graph import StateGraph, START, END
 
 
@@ -11,6 +12,7 @@ class RepoPilotState(TypedDict):
     document_count: int
     relevance_grade: str
     retry_count: int
+    evidence: list[dict[str, Any]]
 
 
 def format_documents(documents):
@@ -31,6 +33,7 @@ class RepoPilotGraph:
     def __init__(self, retriever, llm):
         self.retriever = retriever
         self.llm = llm
+        self._event_callback: Callable[[dict[str, Any]], None] | None = None
 
         builder = StateGraph(RepoPilotState)
         builder.add_node("retrieve", self.retrieve)
@@ -55,8 +58,13 @@ class RepoPilotGraph:
         builder.add_edge("fallback", END)
         self.graph = builder.compile()
 
+    def _emit(self, event_type: str, **data: Any) -> None:
+        if self._event_callback:
+            self._event_callback({"type": event_type, **data})
+
     def retrieve(self, state: RepoPilotState):
         query = state["search_query"]
+        self._emit("stage", stage="context_retrieved", status="running", message="Retrieving repository context.")
         documents = self.retriever.invoke(query)
         context = format_documents(documents)
 
@@ -73,11 +81,50 @@ class RepoPilotGraph:
                 f"{doc.page_content[:500]}"
             )
 
-        return {"context": context, "document_count": len(documents)}
+        evidence = [
+            {
+                "file_path": doc.metadata.get("file_path", ""),
+                "symbol": doc.metadata.get("symbol", ""),
+                "symbol_type": doc.metadata.get("symbol_type", ""),
+                "language": doc.metadata.get("language", ""),
+                "start_line": doc.metadata.get("start_line"),
+                "end_line": doc.metadata.get("end_line"),
+                "content": doc.page_content,
+                "reranker_score": (
+                    float(doc.metadata["reranker_score"])
+                    if doc.metadata.get("reranker_score") is not None
+                    else None
+                ),
+            }
+            for doc in documents
+        ]
+
+        result = {
+            "context": context,
+            "document_count": len(documents),
+            "evidence": evidence,
+        }
+        self._emit(
+            "stage",
+            stage="context_retrieved",
+            status="completed",
+            message=f"{len(documents)} source chunks retrieved.",
+            document_count=len(documents),
+            evidence=evidence,
+        )
+        return result
 
     def grade_relevance(self, state: RepoPilotState):
+        self._emit("stage", stage="evidence_graded", status="running", message="Grading retrieved evidence.")
         if not state["context"].strip():
             print("\n[LangGraph] No evidence retrieved")
+            self._emit(
+                "stage",
+                stage="evidence_graded",
+                status="completed",
+                message="No evidence was available to grade.",
+                relevance_grade="IRRELEVANT",
+            )
             return {"relevance_grade": "IRRELEVANT"}
 
         prompt = f"""
@@ -108,21 +155,29 @@ class RepoPilotGraph:
         )
 
         print(f"\n[LangGraph] LLM relevance grade: {grade}")
+        self._emit(
+            "stage",
+            stage="evidence_graded",
+            status="completed",
+            message=f"Evidence graded {grade.lower()}.",
+            relevance_grade=grade,
+        )
         return {"relevance_grade": grade}
 
     def route_after_grading(self, state: RepoPilotState):
         if state["relevance_grade"] == "RELEVANT":
-            print("[LangGraph] Relevant evidence → Generate")
+            print("[LangGraph] Relevant evidence -> Generate")
             return "generate"
 
         if state["retry_count"] < self.MAX_RETRIES:
-            print("[LangGraph] Irrelevant evidence → Rewrite and retry")
+            print("[LangGraph] Irrelevant evidence -> Rewrite and retry")
             return "rewrite"
 
-        print("[LangGraph] Retry exhausted → Fallback")
+        print("[LangGraph] Retry exhausted -> Fallback")
         return "fallback"
 
     def rewrite_question(self, state: RepoPilotState):
+        self._emit("stage", stage="query_rewritten", status="running", message="Refining the repository search query.")
         prompt = f"""
             You are improving search queries for a code repository retrieval system.
 
@@ -145,28 +200,43 @@ class RepoPilotGraph:
             rewritten = state["question"]
 
         print(f"[LangGraph] Rewritten query: {rewritten}")
-        return {
+        result = {
             "search_query": rewritten,
             "retry_count": state["retry_count"] + 1
         }
+        self._emit("stage", stage="query_rewritten", status="completed", message="Search query refined.")
+        return result
 
     def generate(self, state: RepoPilotState):
+        self._emit("stage", stage="answer_generated", status="running", message="Generating the answer from repository context.")
         response = self.llm.chain.invoke({
             "question": state["question"],
             "context": state["context"]
         })
+        self._emit("stage", stage="answer_generated", status="completed", message="Answer generated.")
         return {"answer": response}
 
     def fallback(self, state: RepoPilotState):
+        answer = (
+            "I couldn't find relevant repository context to answer "
+            "this question reliably. Try rephrasing it or indexing "
+            "the relevant files first."
+        )
+        self._emit("stage", stage="answer_generated", status="completed", message="Fallback answer generated.")
         return {
-            "answer": (
-                "I couldn't find relevant repository context to answer "
-                "this question reliably. Try rephrasing it or indexing "
-                "the relevant files first."
-            )
+            "answer": answer
         }
 
     def run(self, question: str):
+        return self.run_with_state(question)["answer"]
+
+    def run_with_state(
+        self,
+        question: str,
+        event_callback: Callable[[dict[str, Any]], None] | None = None,
+    ):
+        self._event_callback = event_callback
+        self._emit("stage", stage="question_received", status="completed", message="Question received.")
         result = self.graph.invoke({
             "question": question,
             "search_query": question,
@@ -174,6 +244,8 @@ class RepoPilotGraph:
             "answer": "",
             "document_count": 0,
             "relevance_grade": "",
-            "retry_count": 0
+            "retry_count": 0,
+            "evidence": []
         })
-        return result["answer"]
+        self._event_callback = None
+        return result

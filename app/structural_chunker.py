@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import ast
+import re
 
 from tree_sitter import Language, Parser
 import tree_sitter_javascript
@@ -43,6 +44,9 @@ class StructuralChunker:
     def chunk_file(self, file_path, content):
         extension = "." + file_path.split(".")[-1].lower()
         language = self.LANGUAGE_MAP.get(extension)
+
+        if extension in {".md", ".mdx"}:
+            return self._markdown_chunks(file_path, content)
 
         if language not in self.parsers:
             return self._fallback_chunks(file_path, content, language or "unknown")
@@ -180,6 +184,47 @@ class StructuralChunker:
         if not chunks:
             return self._fallback_chunks(file_path, content, language)
         return self._add_uncovered_chunks(file_path, content, language, chunks)
+
+    def _markdown_chunks(self, file_path, content, chunk_size=50, overlap=10):
+        lines = content.splitlines()
+        if not lines:
+            return []
+
+        heading_pattern = re.compile(r"^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$")
+        boundaries = [
+            (index, match.group(2).strip())
+            for index, line in enumerate(lines)
+            if (match := heading_pattern.match(line))
+        ]
+        if not boundaries:
+            return self._fallback_chunks(file_path, content, "markdown", chunk_size, overlap)
+
+        sections = []
+        if boundaries[0][0] > 0:
+            sections.append((0, boundaries[0][0], "document"))
+        for boundary_index, (start, heading) in enumerate(boundaries):
+            end = boundaries[boundary_index + 1][0] if boundary_index + 1 < len(boundaries) else len(lines)
+            sections.append((start, end, heading))
+
+        chunks = []
+        step = chunk_size - overlap
+        for section_start, section_end, symbol in sections:
+            for start in range(section_start, section_end, step):
+                end = min(start + chunk_size, section_end)
+                section_content = "\n".join(lines[start:end]).strip()
+                if section_content:
+                    chunks.append(CodeChunk(
+                        file_path=file_path,
+                        content=section_content,
+                        start_line=start + 1,
+                        end_line=end,
+                        language="markdown",
+                        symbol=symbol,
+                        symbol_type="heading" if symbol != "document" else "document",
+                    ))
+                if end >= section_end:
+                    break
+        return chunks
     
     def _get_symbol_name(self, node, content):
         for child in node.children:

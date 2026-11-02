@@ -18,6 +18,9 @@ class CodeReader:
         ".rb",
         ".html",
         ".css",
+        ".md",
+        ".mdx",
+        ".txt",
     }
 
     def __init__(self, repo_path: str):

@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react";
+import { useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "secondary" | "ghost" | "danger";
@@ -148,7 +148,8 @@ export function MarkdownAnswer({ markdown }: { markdown: string }) {
   lines.forEach((line) => {
     if (line.trim().startsWith("```")) {
       if (inCode) {
-        blocks.push(<pre className="answer-code" key={`code-${blocks.length}`}><code>{code.join("\n")}</code></pre>);
+        const codeText = code.join("\n");
+        blocks.push(<div className="answer-code-wrap" key={`code-${blocks.length}`}><CopyCodeButton code={codeText} /><pre className="answer-code"><code>{codeText}</code></pre></div>);
         code = [];
       } else {
         flushParagraph();
@@ -178,6 +179,63 @@ export function MarkdownAnswer({ markdown }: { markdown: string }) {
   });
   flushParagraph();
   flushList();
-  if (inCode && code.length) blocks.push(<pre className="answer-code" key={`code-${blocks.length}`}><code>{code.join("\n")}</code></pre>);
+  if (inCode && code.length) {
+    const codeText = code.join("\n");
+    blocks.push(<div className="answer-code-wrap" key={`code-${blocks.length}`}><CopyCodeButton code={codeText} /><pre className="answer-code"><code>{codeText}</code></pre></div>);
+  }
   return <div className="markdown-answer">{blocks}</div>;
+}
+
+export function AnimatedMarkdownAnswer({ markdown }: { markdown: string }) {
+  const [displayed, setDisplayed] = useState(() => (
+    typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? markdown
+      : ""
+  ));
+  const [isComplete, setIsComplete] = useState(displayed === markdown);
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setDisplayed(markdown);
+      setIsComplete(true);
+      return;
+    }
+
+    setDisplayed("");
+    setIsComplete(false);
+    let position = 0;
+    let timer: number | undefined;
+    const reveal = () => {
+      position = Math.min(markdown.length, position + 2);
+      setDisplayed(markdown.slice(0, position));
+      if (position < markdown.length) {
+        timer = window.setTimeout(reveal, 16);
+      } else {
+        setIsComplete(true);
+      }
+    };
+    timer = window.setTimeout(reveal, 40);
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [markdown]);
+
+  return (
+    <div className="answer-generation" aria-busy={!isComplete}>
+      <MarkdownAnswer markdown={displayed} />
+      {!isComplete && <span className="answer-caret" aria-hidden="true" />}
+    </div>
+  );
+}
+
+function CopyCodeButton({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copyCode() {
+    await navigator.clipboard.writeText(code);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  }
+
+  return <button className="copy-code" type="button" onClick={copyCode}>{copied ? "Copied" : "Copy"}</button>;
 }

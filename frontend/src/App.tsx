@@ -1,30 +1,73 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { Alert, Button, MarkdownAnswer, Panel, StatusBadge, TextArea, TextInput } from "./components";
-import { getIndexingStatus, getRepositories, startIndexing, streamQuestion, type Evidence, type IndexJob, type InvestigationStage, type QuestionResponse } from "./api";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Alert, AnimatedMarkdownAnswer, Button, StatusBadge, TextArea, TextInput } from "./components";
+import { getCurrentUser, getIndexingStatus, getRepositories, loginWithGoogle, logout, startIndexing, streamQuestion, type AuthUser, type Evidence, type IndexJob, type InvestigationStage, type QuestionResponse } from "./api";
 
 type Theme = "light" | "dark";
+
+type ConversationTurn = {
+  id: string;
+  question: string;
+  response: QuestionResponse | null;
+  error: string;
+  stages: Record<string, InvestigationStage>;
+  isLoading: boolean;
+};
+
+function InvestigationTrail({ stages }: { stages: Record<string, InvestigationStage> }) {
+  const steps = [
+    ["question_received", "Question received"],
+    ["context_retrieved", "Context retrieved"],
+    ["evidence_graded", "Evidence graded"],
+    ["answer_generated", "Answer generated"],
+  ] as const;
+  return (
+    <ol className="source-trail compact-trail" aria-label="Investigation progress">
+      {steps.map(([stage, label], index) => {
+        const event = stages[stage];
+        return <li className={event?.status === "completed" ? "trail-complete" : event?.status === "running" ? "trail-current" : ""} key={stage}><span className="trail-node">{event?.status === "completed" ? "OK" : index + 1}</span><span><strong>{label}</strong><small>{event?.message ?? "Waiting for this stage"}</small></span></li>;
+      })}
+    </ol>
+  );
+}
 
 function App() {
   const [theme, setTheme] = useState<Theme>("light");
   const [query, setQuery] = useState("");
   const [repositories, setRepositories] = useState<string[]>([]);
   const [repositoryName, setRepositoryName] = useState("");
-  const [result, setResult] = useState<QuestionResponse | null>(null);
   const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [isLoadingRepositories, setIsLoadingRepositories] = useState(true);
   const [indexUrl, setIndexUrl] = useState("");
   const [indexJob, setIndexJob] = useState<IndexJob | null>(null);
   const [indexError, setIndexError] = useState("");
   const [showIndexing, setShowIndexing] = useState(false);
   const [expandedEvidence, setExpandedEvidence] = useState<Record<string, boolean>>({});
-  const [investigationStages, setInvestigationStages] = useState<Record<string, InvestigationStage>>({});
+  const [conversation, setConversation] = useState<ConversationTurn[]>([]);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState("");
+  const [profileImageFailed, setProfileImageFailed] = useState(false);
+  const googleButton = useRef<HTMLDivElement>(null);
+  const conversationRef = useRef<HTMLDivElement>(null);
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
   useEffect(() => {
+    setProfileImageFailed(false);
+  }, [authUser?.picture_url]);
+
+  useEffect(() => {
+    getCurrentUser()
+      .then(({ user }) => setAuthUser(user))
+      .catch(() => setAuthUser(null))
+      .finally(() => setAuthLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!authUser) return;
     getRepositories()
       .then(({ repositories: indexedRepositories }) => {
         const names = indexedRepositories.map(({ name }) => name);
@@ -33,7 +76,45 @@ function App() {
       })
       .catch((requestError: Error) => setError(requestError.message))
       .finally(() => setIsLoadingRepositories(false));
-  }, []);
+  }, [authUser]);
+
+  useEffect(() => {
+    if (authUser || !googleClientId || !googleButton.current) return;
+    let cancelled = false;
+    let attempts = 0;
+    let timer: number | undefined;
+    const renderGoogleButton = () => {
+      if (cancelled || !googleButton.current) return;
+      if (!window.google) {
+        attempts += 1;
+        if (attempts < 50) timer = window.setTimeout(renderGoogleButton, 100);
+        else setAuthError("Google sign-in could not load. Check your network connection and reload.");
+        return;
+      }
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: ({ credential }) => {
+          setAuthError("");
+          loginWithGoogle(credential)
+            .then(({ user }) => setAuthUser(user))
+            .catch((requestError: Error) => setAuthError(requestError.message));
+        },
+      });
+      googleButton.current.replaceChildren();
+      window.google.accounts.id.renderButton(googleButton.current, {
+        theme: "outline",
+        size: "large",
+        width: 280,
+        text: "signin_with",
+        shape: "rectangular",
+      });
+    };
+    renderGoogleButton();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [authLoading, authUser, googleClientId]);
 
   useEffect(() => {
     if (!indexJob || !["queued", "running"].includes(indexJob.status)) return;
@@ -63,21 +144,67 @@ function App() {
   }
 
   function submitQuery() {
-    if (!query.trim() || !repositoryName) return;
-    setIsLoading(true);
+    const question = query.trim();
+    if (!question || !repositoryName || conversation.some((turn) => turn.isLoading)) return;
+    const turnId = `${Date.now()}-${conversation.length}`;
+    const turn: ConversationTurn = {
+      id: turnId,
+      question,
+      response: null,
+      error: "",
+      stages: {},
+      isLoading: true,
+    };
+    setConversation((current) => [...current, turn]);
+    setQuery("");
     setError("");
-    setResult(null);
-    setInvestigationStages({});
-    streamQuestion(repositoryName, query.trim(), (stage) => {
-      setInvestigationStages((current) => ({ ...current, [stage.stage]: stage }));
+    window.requestAnimationFrame(() => {
+      conversationRef.current?.scrollTo({
+        top: conversationRef.current.scrollHeight,
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      });
+    });
+    streamQuestion(repositoryName, question, (stage) => {
+      setConversation((current) => current.map((item) => item.id === turnId
+        ? { ...item, stages: { ...item.stages, [stage.stage]: stage } }
+        : item));
     })
-      .then(setResult)
-      .catch((requestError: Error) => setError(requestError.message))
-      .finally(() => setIsLoading(false));
+      .then((response) => setConversation((current) => current.map((item) => item.id === turnId
+        ? { ...item, response, isLoading: false }
+        : item)))
+      .catch((requestError: Error) => setConversation((current) => current.map((item) => item.id === turnId
+        ? { ...item, error: requestError.message, isLoading: false }
+        : item)));
   }
 
-  const evidence = result?.evidence ?? [];
-  const selectedRepository = repositoryName || "No indexed repository";
+  if (authLoading) {
+    return <div className="auth-gate"><div className="loading-state" role="status"><span className="loading-bar" /><strong>Preparing your workspace…</strong></div></div>;
+  }
+
+  if (!authUser) {
+    return (
+      <div className="auth-gate">
+        <div className="auth-card">
+          <a className="wordmark" href="/" aria-label="RepoPilot home"><span className="mark" aria-hidden="true"><span /><span /><span /></span><span>RepoPilot</span></a>
+          <span className="eyebrow">Evidence Field</span>
+          <h1>Sign in to your repository workspace.</h1>
+          <p>Use your Google account to access private repository context and source evidence.</p>
+          <div ref={googleButton} className="google-button" aria-label="Sign in with Google" />
+          {!googleClientId && <Alert tone="danger" title="Google sign-in is not configured">Set VITE_GOOGLE_CLIENT_ID in frontend/.env.</Alert>}
+          {authError && <Alert tone="danger" title="Sign-in failed">{authError}</Alert>}
+          <div className="auth-theme-row"><span>Theme</span><Button variant="ghost" onClick={() => setTheme(theme === "light" ? "dark" : "light")}>{theme === "light" ? "Dark" : "Light"} mode</Button></div>
+        </div>
+      </div>
+    );
+  }
+
+  function signOut() {
+    logout().then(() => {
+      setAuthUser(null);
+      setRepositories([]);
+      setConversation([]);
+    }).catch((requestError: Error) => setAuthError(requestError.message));
+  }
 
   return (
     <div className="app-shell">
@@ -92,7 +219,20 @@ function App() {
         </a>
         <div className="topbar-context">
           <span className="context-label">Workspace</span>
-          <strong>{selectedRepository}</strong>
+          <label className="sr-only" htmlFor="workspace-repository">Active repository</label>
+          <select
+            id="workspace-repository"
+            className="repository-selector"
+            value={repositoryName}
+            onChange={(event) => {
+              setRepositoryName(event.target.value);
+              setConversation([]);
+            }}
+            disabled={isLoadingRepositories || repositories.length === 0}
+          >
+            {!repositoryName && <option value="">No indexed repository</option>}
+            {repositories.map((name) => <option value={name} key={name}>{name}</option>)}
+          </select>
         </div>
         <div className="topbar-actions">
           <Button variant="ghost" aria-label="Open keyboard shortcuts">Shortcuts <kbd>Ctrl K</kbd></Button>
@@ -104,6 +244,16 @@ function App() {
             <span className="theme-indicator" aria-hidden="true" />
             {theme === "light" ? "Dark" : "Light"}
           </Button>
+          <details className="profile-menu">
+            <summary aria-label="Open profile menu">
+              {authUser.picture_url && !profileImageFailed ? <img src={authUser.picture_url} alt="" onError={() => setProfileImageFailed(true)} /> : <span>{(authUser.name ?? authUser.email).slice(0, 1).toUpperCase()}</span>}
+            </summary>
+            <div className="profile-popover">
+              <strong>{authUser.name ?? "Google account"}</strong>
+              <small>{authUser.email}</small>
+              <Button variant="ghost" onClick={signOut}>Sign out</Button>
+            </div>
+          </details>
         </div>
       </header>
 
@@ -120,7 +270,7 @@ function App() {
                 key={name}
                 onClick={() => {
                   setRepositoryName(name);
-                  setResult(null);
+                  setConversation([]);
                 }}
               >
                 <span className="repo-glyph">{name.slice(0, 1).toUpperCase()}</span>
@@ -140,131 +290,99 @@ function App() {
         <main className="main-content">
           <div className="page-heading">
             <div>
-              <h1>Ask the repository.</h1>
-              <p className="lede">Trace a question from intent to source evidence, without losing the thread.</p>
+              <h1>Repository conversation.</h1>
+              <p className="lede">Ask follow-up questions and keep the evidence trail in context.</p>
             </div>
             <Button variant="secondary" onClick={() => setShowIndexing(true)}>Index repository</Button>
           </div>
 
-          <section className="composer-section" aria-labelledby="question-title">
-            <div className="section-title">
-              <span className="accent-line" aria-hidden="true" />
-              <h2 id="question-title">Start an investigation</h2>
-            </div>
-            <div className="composer">
-              <TextInput
-                label="Repository"
-                value={repositoryName}
-                onChange={(event) => setRepositoryName(event.target.value)}
-                list="repository-options"
-                placeholder="Select an indexed repository"
-                disabled={isLoadingRepositories}
-              />
-              <datalist id="repository-options">
-                {repositories.map((name) => <option value={name} key={name} />)}
-              </datalist>
-              <TextArea
-                label="Your question"
-                aria-label="Your question"
-                placeholder="e.g. Where is repository context assembled before generation?"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                rows={3}
-              />
-              <div className="composer-footer">
-                <span className="composer-hint">Searches symbols, files, docs, and indexed context.</span>
-                <Button variant="primary" onClick={submitQuery} disabled={isLoading || !query.trim() || !repositoryName}>
-                  {isLoading ? "Retrieving…" : "Find evidence"} <span aria-hidden="true">↗</span>
-                </Button>
+          <div className="conversation-thread" ref={conversationRef} aria-live="polite">
+            {conversation.length === 0 ? (
+              <div className="conversation-empty">
+                <span className="empty-mark" aria-hidden="true">•••</span>
+                <h2>Ask about your repository.</h2>
+                <p>Questions, follow-ups, and the source evidence behind each answer will stay together here.</p>
               </div>
-            </div>
-          </section>
-
-          <div className="content-grid">
-            <div className="primary-column">
-              {error ? (
-                <Panel title="Answer">
-                  <Alert tone="danger" title="Investigation failed">{error}</Alert>
-                </Panel>
-              ) : isLoading ? (
-                <Panel title="Answer">
-                  <div className="loading-state" role="status"><span className="loading-bar" /><strong>Following the evidence trail…</strong><p>{investigationStages.answer_generated?.message ?? "Retrieving and grading repository context."}</p></div>
-                </Panel>
-              ) : result ? (
-                <Panel title="Answer" action={<StatusBadge tone={result.relevance_grade === "RELEVANT" ? "evidence" : "warning"}>{result.relevance_grade === "RELEVANT" ? "Grounded" : "Needs review"}</StatusBadge>}>
-                  <div className="answer">
-                    <MarkdownAnswer markdown={result.answer} />
-                    <p>{result.document_count} source chunks were retrieved and graded {result.relevance_grade.toLowerCase()}.</p>
-                    <div className="answer-actions">
-                      <Button variant="secondary" onClick={() => setResult(null)}>New investigation</Button>
+            ) : conversation.map((turn) => {
+              const evidence = turn.response?.evidence ?? [];
+              return (
+                <article className="conversation-turn" key={turn.id}>
+                  <div className="user-message">
+                    <span className="message-label">You</span>
+                    <p>{turn.question}</p>
+                  </div>
+                  <div className="assistant-message">
+                    <div className="assistant-heading">
+                      <span className="assistant-mark" aria-hidden="true">R</span>
+                      <span>RepoPilot</span>
+                      {turn.response && <StatusBadge tone={turn.response.relevance_grade === "RELEVANT" ? "evidence" : "warning"}>{turn.response.relevance_grade === "RELEVANT" ? "Grounded" : "Needs review"}</StatusBadge>}
                     </div>
+                    {turn.isLoading ? (
+                      <div className="loading-state conversation-loading" role="status">
+                        <span className="loading-bar" />
+                        <strong>Following the evidence trail…</strong>
+                        <p>{turn.stages.answer_generated?.message ?? "Retrieving and grading repository context."}</p>
+                        <InvestigationTrail stages={turn.stages} />
+                      </div>
+                    ) : turn.error ? (
+                      <Alert tone="danger" title="Investigation failed">{turn.error}</Alert>
+                    ) : turn.response ? (
+                      <>
+                        <div className="answer">
+                          <AnimatedMarkdownAnswer markdown={turn.response.answer} />
+                          <p>{turn.response.document_count} source chunks were retrieved and graded {turn.response.relevance_grade.toLowerCase()}.</p>
+                        </div>
+                        {evidence.length > 0 && (
+                          <details className="sources-disclosure">
+                            <summary>Sources <span>{evidence.length}</span></summary>
+                            <div className="evidence-scroller" tabIndex={0} aria-label="Horizontally scrollable source evidence">
+                              {evidence.map((item: Evidence) => {
+                                const evidenceKey = `${turn.id}:${item.file_path}:${item.start_line}`;
+                                return (
+                                  <article className="evidence-card" key={evidenceKey}>
+                                    <div className="evidence-meta"><StatusBadge tone="evidence">Retrieved</StatusBadge><span className="mono">lines {item.start_line ?? "?"}–{item.end_line ?? "?"}</span></div>
+                                    <strong className="evidence-path">{item.file_path}</strong>
+                                    <span className="evidence-symbol">{item.symbol || "Module scope"}</span>
+                                    <div className="evidence-details"><span className="mono">score {item.reranker_score?.toFixed(3) ?? "n/a"}</span><button className="evidence-toggle" onClick={() => setExpandedEvidence((current) => ({ ...current, [evidenceKey]: !current[evidenceKey] }))} aria-expanded={Boolean(expandedEvidence[evidenceKey])}>{expandedEvidence[evidenceKey] ? "Collapse" : "Expand"}</button></div>
+                                    <pre className={`code-block ${expandedEvidence[evidenceKey] ? "code-block-expanded" : ""}`} aria-label={`Source from ${item.file_path}`}><code>{expandedEvidence[evidenceKey] ? item.content : item.content.slice(0, 420)}{!expandedEvidence[evidenceKey] && item.content.length > 420 ? "…" : ""}</code></pre>
+                                  </article>
+                                );
+                              })}
+                            </div>
+                          </details>
+                        )}
+                      </>
+                    ) : null}
                   </div>
-                </Panel>
-              ) : (
-                <Panel title="Answer">
-                  <div className="empty-state">
-                    <span className="empty-mark" aria-hidden="true">•••</span>
-                    <h3>Your evidence trail will appear here.</h3>
-                    <p>Ask a question to see a concise answer alongside the files and symbols that support it.</p>
-                  </div>
-                </Panel>
-              )}
-
-            </div>
-
-            <aside className="evidence-column" aria-label="Source evidence">
-              <Panel title="Source evidence">
-                {evidence.length > 0 ? evidence.map((item: Evidence) => (
-                  <div className="evidence-card" key={`${item.file_path}:${item.start_line}`}>
-                    <div className="evidence-meta">
-                      <StatusBadge tone="evidence">Retrieved evidence</StatusBadge>
-                      <span className="mono">lines {item.start_line ?? "?"}–{item.end_line ?? "?"}</span>
-                    </div>
-                    <strong className="evidence-path">{item.file_path}</strong>
-                    <span className="evidence-symbol">{item.symbol || "Module scope"}</span>
-                    <div className="evidence-details">
-                      <span className="mono">reranker score {item.reranker_score?.toFixed(3) ?? "n/a"}</span>
-                      <button className="evidence-toggle" onClick={() => setExpandedEvidence((current) => ({ ...current, [`${item.file_path}:${item.start_line}`]: !current[`${item.file_path}:${item.start_line}`] }))} aria-expanded={Boolean(expandedEvidence[`${item.file_path}:${item.start_line}`])}>
-                        {expandedEvidence[`${item.file_path}:${item.start_line}`] ? "Collapse preview" : "Expand preview"}
-                      </button>
-                    </div>
-                    <pre className={`code-block ${expandedEvidence[`${item.file_path}:${item.start_line}`] ? "code-block-expanded" : ""}`} aria-label={`Source from ${item.file_path}`}><code>{expandedEvidence[`${item.file_path}:${item.start_line}`] ? item.content : item.content.slice(0, 420)}{!expandedEvidence[`${item.file_path}:${item.start_line}`] && item.content.length > 420 ? "…" : ""}</code></pre>
-                  </div>
-                )) : (
-                  <div className="empty-state">
-                    <h3>No evidence yet.</h3>
-                    <p>Submit a question to see the actual retrieved source chunks.</p>
-                  </div>
-                )}
-              </Panel>
-
-              <Panel title="Evidence trail" className="trail-panel">
-                <ol className="source-trail">
-                  {[
-                    ["question_received", "Question received"],
-                    ["context_retrieved", "Context retrieved"],
-                    ["evidence_graded", "Evidence graded"],
-                    ["answer_generated", "Answer generated"],
-                  ].map(([stage, label], index) => {
-                    const event = investigationStages[stage];
-                    return <li className={event?.status === "completed" ? "trail-complete" : event?.status === "running" ? "trail-current" : ""} key={stage}><span className="trail-node">{event?.status === "completed" ? "OK" : index + 1}</span><span><strong>{label}</strong><small>{event?.message ?? "Waiting for this stage"}</small></span></li>;
-                  })}
-                </ol>
-              </Panel>
-            </aside>
+                </article>
+              );
+            })}
           </div>
+
+          <form className="conversation-composer" onSubmit={(event) => { event.preventDefault(); submitQuery(); }}>
+            <div className="composer-input-row">
+              <TextArea label="Message RepoPilot" aria-label="Message RepoPilot" placeholder="Ask a follow-up about the repository…" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} rows={2} />
+              <Button variant="primary" type="submit" disabled={conversation.some((turn) => turn.isLoading) || !query.trim() || !repositoryName}>Send <span aria-hidden="true">↗</span></Button>
+            </div>
+            <span className="composer-hint">Enter to send · Shift+Enter for a new line</span>
+          </form>
         </main>
       </div>
       {showIndexing && (
         <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowIndexing(false); }}>
           <section className="dialog" role="dialog" aria-modal="true" aria-labelledby="index-dialog-title">
-            <div className="panel-heading"><h2 id="index-dialog-title">Index a repository</h2><Button variant="ghost" onClick={() => setShowIndexing(false)}>Close</Button></div>
+            <div className="panel-heading"><h2 id="index-dialog-title">Index a repository</h2></div>
             <form className="dialog-body" onSubmit={submitIndexing}>
               <TextInput label="GitHub repository URL" value={indexUrl} onChange={(event) => setIndexUrl(event.target.value)} placeholder="https://github.com/owner/repository" disabled={indexJob?.status === "queued" || indexJob?.status === "running"} />
               <p className="field-hint">Indexing runs in the background. Existing local clones are reused.</p>
               {indexError && <Alert tone="danger" title="Indexing could not start">{indexError}</Alert>}
               {indexJob && <div className={`index-job index-job-${indexJob.status}`}><strong>{indexJob.message}</strong><span>Current stage: {indexJob.stage}</span><div className="progress-track" role="progressbar" aria-label="Repository indexing progress" aria-valuetext={indexJob.status === "running" ? `${indexJob.stage} in progress` : indexJob.status}><span className={indexJob.status === "running" ? "progress-indeterminate" : indexJob.status === "completed" ? "progress-complete" : "progress-queued"} /></div><div className="completed-stages"><span>Completed stages</span><strong>{indexJob.completed_stages.length ? indexJob.completed_stages.join(" · ") : "None yet"}</strong></div>{indexJob.error && <p>{indexJob.error}</p>}{indexJob.chunk_count && <span>{indexJob.chunk_count} chunks stored</span>}</div>}
-              <div className="dialog-actions"><Button variant="secondary" type="button" onClick={() => setShowIndexing(false)}>Cancel</Button><Button variant="primary" type="submit" disabled={!indexUrl.trim() || indexJob?.status === "queued" || indexJob?.status === "running"}>{indexJob?.status === "queued" || indexJob?.status === "running" ? "Indexing…" : "Start indexing"}</Button></div>
+              <div className="dialog-actions">
+                {indexJob?.status !== "completed" && <Button variant="secondary" type="button" onClick={() => setShowIndexing(false)}>Cancel</Button>}
+                <Button variant={indexJob?.status === "completed" ? "secondary" : "primary"} type={indexJob?.status === "completed" ? "button" : "submit"} onClick={indexJob?.status === "completed" ? () => setShowIndexing(false) : undefined} disabled={indexJob?.status === "queued" || indexJob?.status === "running"}>
+                  {indexJob?.status === "queued" || indexJob?.status === "running" ? "Indexing…" : indexJob?.status === "completed" ? "Done" : "Start indexing"}
+                </Button>
+              </div>
             </form>
           </section>
         </div>

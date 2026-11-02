@@ -2,7 +2,7 @@
 
 This is the first frontend milestone: a standalone React + TypeScript + Vite design-system playground for the Evidence Field direction. It demonstrates reusable controls and the visual states that will support the future repository workbench.
 
-The question flow and repository indexing are connected to the Python API. The frontend reads repositories from Chroma, starts background indexing jobs, and renders answers and evidence returned by the existing LangGraph workflow.
+The question flow and repository indexing are connected to the Python API. Google Identity Services establishes a RepoPilot session before user-owned repositories, indexing jobs, answers, and evidence are available.
 
 ## Requirements
 
@@ -12,6 +12,11 @@ The question flow and repository indexing are connected to the Python API. The f
 ## Run locally
 
 ```powershell
+# Configure frontend/.env from frontend/.env.example with the Google OAuth web client ID.
+# Configure app/.env from app/.env.example with GOOGLE_CLIENT_ID and REPOPILOT_AUTH_SECRET.
+# Apply the database migration from the repository root:
+.\venv\Scripts\alembic.exe upgrade head
+
 # Terminal 1, from the repository root:
 .\venv\Scripts\python.exe -m uvicorn app.api:app --reload --host 127.0.0.1 --port 8000
 
@@ -26,12 +31,30 @@ Open the local URL printed by Vite. Vite proxies `/api` requests to `http://127.
 The API exposes:
 
 - `GET /api/health`
-- `GET /api/repositories`
-- `POST /api/questions`
-- `POST /api/indexing`
-- `GET /api/indexing/{job_id}`
+- `POST /api/auth/google`
+- `GET /api/auth/me`
+- `POST /api/auth/logout`
+- `GET /api/repositories` (authenticated)
+- `POST /api/questions` (authenticated)
+- `GET /api/questions/stream` (authenticated)
+- `POST /api/indexing` (authenticated)
+- `GET /api/indexing/{job_id}` (authenticated and owner-scoped)
 
 Indexing accepts an HTTPS GitHub URL and reports queued, running, completed, or failed stages. Existing local clones are reused.
+
+## Google Cloud setup
+
+Create a Google OAuth client of type **Web application** in Google Cloud Console.
+Add the exact local origins `http://localhost:5173` and
+`http://127.0.0.1:5173` as authorized JavaScript origins. Put the client ID in
+both `frontend/.env` as `VITE_GOOGLE_CLIENT_ID` and `app/.env` as
+`GOOGLE_CLIENT_ID`. Never put the client secret in the frontend or repository.
+
+The backend verifies the GIS ID token with Google's official `google-auth`
+library, checks issuer, audience, expiry, signature, and `email_verified`, and
+uses the token's `sub` claim as the external identity. RepoPilot issues its own
+15-minute HttpOnly session cookie; `REPOPILOT_AUTH_SECRET` must be a long random
+secret and should be rotated through deployment secret management in production.
 
 ## Checks
 

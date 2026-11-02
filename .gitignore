@@ -3,5 +3,9 @@ repos/
 __pycache__/
 *.pyc
 .env
+*.env
+!.env.example
+alembic.ini.local
 chroma_db/
 frontend/node_modules
+tests/

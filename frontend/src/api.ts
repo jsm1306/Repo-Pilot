@@ -2,6 +2,18 @@ export type RepositorySummary = {
   name: string;
 };
 
+export type AuthUser = {
+  id: string;
+  email: string;
+  name: string | null;
+  picture_url: string | null;
+  is_active: boolean;
+};
+
+export type AuthResponse = {
+  user: AuthUser;
+};
+
 export type Evidence = {
   file_path: string;
   symbol: string;
@@ -50,16 +62,62 @@ type ErrorPayload = {
   };
 };
 
+export type GoogleCredentialResponse = {
+  credential: string;
+};
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (options: {
+            client_id: string;
+            callback: (response: GoogleCredentialResponse) => void;
+          }) => void;
+          renderButton: (element: HTMLElement, options: Record<string, string | number>) => void;
+        };
+      };
+    };
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const csrfToken = document.cookie
+    .split("; ")
+    .find((cookie) => cookie.startsWith("repopilot_csrf="))
+    ?.split("=")[1];
+  const headers = new Headers(init?.headers);
+  headers.set("Content-Type", "application/json");
+  if (csrfToken && init?.method && init.method !== "GET") {
+    headers.set("X-CSRF-Token", decodeURIComponent(csrfToken));
+  }
   const response = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
     ...init,
+    credentials: "same-origin",
+    headers,
   });
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as ErrorPayload | null;
     throw new Error(payload?.detail?.message ?? "The RepoPilot API could not complete the request.");
   }
+
   return response.json() as Promise<T>;
+}
+
+export function getCurrentUser(): Promise<AuthResponse> {
+  return request("/api/auth/me");
+}
+
+export function loginWithGoogle(credential: string): Promise<AuthResponse> {
+  return request("/api/auth/google", {
+    method: "POST",
+    body: JSON.stringify({ credential }),
+  });
+}
+
+export function logout(): Promise<void> {
+  return request("/api/auth/logout", { method: "POST" }).then(() => undefined);
 }
 
 export function getRepositories(): Promise<{ repositories: RepositorySummary[] }> {
@@ -103,6 +161,7 @@ export function streamQuestion(
         source.close();
         reject(new Error(payload.message));
       }
+
     };
     source.onerror = () => {
       source.close();

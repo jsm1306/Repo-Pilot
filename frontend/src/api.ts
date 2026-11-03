@@ -35,6 +35,35 @@ export type QuestionResponse = {
   evidence: Evidence[];
 };
 
+export type ChatSession = {
+  id: string;
+  repository_name: string;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ChatSessionListResponse = {
+  sessions: ChatSession[];
+};
+
+export type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+  evidence: Evidence[];
+};
+
+export type ChatSessionDetail = ChatSession & {
+  messages: ChatMessage[];
+};
+
+export type CreateChatSessionRequest = {
+  repository_name: string;
+  title?: string | null;
+};
+
 export type IndexJob = {
   job_id: string;
   status: "queued" | "running" | "completed" | "failed";
@@ -99,7 +128,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as ErrorPayload | null;
-    throw new Error(payload?.detail?.message ?? "The RepoPilot API could not complete the request.");
+    throw new Error(
+      payload?.detail?.message ??
+        "The RepoPilot API could not complete the request.",
+    );
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   return response.json() as Promise<T>;
@@ -124,6 +160,51 @@ export function getRepositories(): Promise<{ repositories: RepositorySummary[] }
   return request("/api/repositories");
 }
 
+export function createChatSession(
+  repository_name: string,
+  title?: string,
+): Promise<ChatSession> {
+  return request("/api/chat/sessions", {
+    method: "POST",
+    body: JSON.stringify({ repository_name, title }),
+  });
+}
+
+export function getChatSessions(
+  repositoryName?: string,
+): Promise<ChatSessionListResponse> {
+  const params = new URLSearchParams();
+
+  if (repositoryName) {
+    params.set("repository_name", repositoryName);
+  }
+
+  const query = params.toString();
+  return request(`/api/chat/sessions${query ? `?${query}` : ""}`);
+}
+
+export function getChatSession(
+  sessionId: string,
+): Promise<ChatSessionDetail> {
+  return request(`/api/chat/sessions/${sessionId}`);
+}
+
+export function renameChatSession(
+  sessionId: string,
+  title: string,
+): Promise<ChatSession> {
+  return request(`/api/chat/sessions/${sessionId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ title }),
+  });
+}
+
+export function deleteChatSession(sessionId: string): Promise<void> {
+  return request(`/api/chat/sessions/${sessionId}`, {
+    method: "DELETE",
+  });
+}
+
 export function askQuestion(repository_name: string, question: string): Promise<QuestionResponse> {
   return request("/api/questions", {
     method: "POST",
@@ -145,13 +226,18 @@ export function getIndexingStatus(jobId: string): Promise<IndexJob> {
 export function streamQuestion(
   repositoryName: string,
   question: string,
+  sessionId: string,
   onStage: (event: InvestigationStage) => void,
 ): Promise<QuestionResponse> {
-  const params = new URLSearchParams({ repository_name: repositoryName, question });
+  const params = new URLSearchParams({repository_name: repositoryName, question, session_id: sessionId,});
   return new Promise((resolve, reject) => {
     const source = new EventSource(`/api/questions/stream?${params.toString()}`);
     source.onmessage = (event) => {
-      const payload = JSON.parse(event.data) as InvestigationStage | { type: "complete"; response: QuestionResponse } | { type: "error"; message: string };
+      const payload = JSON.parse(event.data) as
+        | InvestigationStage
+        | { type: "complete"; response: QuestionResponse }
+        | { type: "error"; code: string; message: string };
+
       if (payload.type === "stage") {
         onStage(payload);
       } else if (payload.type === "complete") {

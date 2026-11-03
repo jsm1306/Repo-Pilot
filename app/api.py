@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.embedder import Embedder
 from app.langchain_llm import RepoPilotLLM
@@ -33,7 +33,7 @@ from app.auth import (
     verify_google_credential,
 )
 from app.database import SessionLocal, get_db
-from app.db_models import Repository, User
+from app.db_models import ChatSession, Evidence, Message,Repository, User
 
 
 class HealthResponse(BaseModel):
@@ -63,10 +63,21 @@ class RepositorySummary(BaseModel):
 class RepositoriesResponse(BaseModel):
     repositories: list[RepositorySummary]
 
-
-class QuestionRequest(BaseModel):
+class CreateChatSessionRequest(BaseModel):
     repository_name: str = Field(min_length=1, max_length=255)
-    question: str = Field(min_length=1, max_length=4000)
+    title: str | None = Field(default=None, max_length=255)
+
+
+class RenameChatSessionRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+
+
+class ChatSessionResponse(BaseModel):
+    id: str
+    repository_name: str
+    title: str | None
+    created_at: datetime
+    updated_at: datetime
 
 
 class EvidenceResponse(BaseModel):
@@ -78,6 +89,32 @@ class EvidenceResponse(BaseModel):
     end_line: int | None = None
     content: str
     reranker_score: float | None = None
+
+
+class ChatSessionListResponse(BaseModel):
+    sessions: list[ChatSessionResponse]
+
+
+class ChatMessageResponse(BaseModel):
+    id: str
+    role: str
+    content: str
+    created_at: datetime
+    evidence: list[EvidenceResponse] = Field(default_factory=list)
+
+
+class ChatSessionDetailResponse(BaseModel):
+    id: str
+    repository_name: str
+    title: str | None
+    created_at: datetime
+    updated_at: datetime
+    messages: list[ChatMessageResponse]
+
+
+class QuestionRequest(BaseModel):
+    repository_name: str = Field(min_length=1, max_length=255)
+    question: str = Field(min_length=1, max_length=4000)
 
 
 class QuestionResponse(BaseModel):
@@ -123,7 +160,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["*"],
 )
 
@@ -240,7 +277,203 @@ def repositories(
     return RepositoriesResponse(
         repositories=[RepositorySummary(name=name) for name in names]
     )
+@app.post(
+    "/api/chat/sessions",
+    response_model=ChatSessionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_chat_session(
+    payload: CreateChatSessionRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ChatSessionResponse:
+    require_csrf(request)
 
+    repository = db.scalar(
+        select(Repository).where(
+            Repository.user_id == current_user.id,
+            Repository.name == payload.repository_name,
+            Repository.indexing_status == "completed",
+        )
+    )
+
+    if repository is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "repository_not_found",
+                "message": "The selected repository was not found or is not indexed.",
+            },
+        )
+
+    title = payload.title.strip() if payload.title else None
+
+    session = ChatSession(
+        user_id=current_user.id,
+        repository_id=repository.id,
+        title=title or None,
+    )
+
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+
+    return _chat_session_response(session)
+
+
+@app.get(
+    "/api/chat/sessions",
+    response_model=ChatSessionListResponse,
+)
+def list_chat_sessions(
+    repository_name: str | None = Query(default=None, max_length=255),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ChatSessionListResponse:
+    statement = (
+        select(ChatSession)
+        .join(Repository, ChatSession.repository_id == Repository.id)
+        .where(ChatSession.user_id == current_user.id)
+    )
+
+    if repository_name:
+        statement = statement.where(Repository.name == repository_name)
+
+    sessions = db.scalars(
+        statement.order_by(ChatSession.updated_at.desc())
+    ).all()
+
+    return ChatSessionListResponse(
+        sessions=[_chat_session_response(session) for session in sessions]
+    )
+
+
+@app.get(
+    "/api/chat/sessions/{session_id}",
+    response_model=ChatSessionDetailResponse,
+)
+def get_chat_session(
+    session_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ChatSessionDetailResponse:
+    session = db.scalar(
+        select(ChatSession)
+        .options(
+            selectinload(ChatSession.repository),
+            selectinload(ChatSession.messages).selectinload(Message.evidence),
+        )
+        .where(
+            ChatSession.id == session_id,
+            ChatSession.user_id == current_user.id,
+        )
+    )
+
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "chat_session_not_found",
+                "message": "The conversation was not found.",
+            },
+        )
+
+    return ChatSessionDetailResponse(
+        id=str(session.id),
+        repository_name=session.repository.name,
+        title=session.title,
+        created_at=session.created_at,
+        updated_at=session.updated_at,
+        messages=[
+            _chat_message_response(message)
+            for message in session.messages
+        ],
+    )
+
+
+@app.patch(
+    "/api/chat/sessions/{session_id}",
+    response_model=ChatSessionResponse,
+)
+def rename_chat_session(
+    session_id: uuid.UUID,
+    payload: RenameChatSessionRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ChatSessionResponse:
+    require_csrf(request)
+
+    session = db.scalar(
+        select(ChatSession)
+        .options(selectinload(ChatSession.repository))
+        .where(
+            ChatSession.id == session_id,
+            ChatSession.user_id == current_user.id,
+        )
+    )
+
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "chat_session_not_found",
+                "message": "The conversation was not found.",
+            },
+        )
+
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "invalid_title",
+                "message": "Conversation title cannot be empty.",
+            },
+        )
+
+    session.title = title
+    session.updated_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(session)
+
+    return _chat_session_response(session)
+
+
+@app.delete(
+    "/api/chat/sessions/{session_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_chat_session(
+    session_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    require_csrf(request)
+
+    session = db.scalar(
+        select(ChatSession).where(
+            ChatSession.id == session_id,
+            ChatSession.user_id == current_user.id,
+        )
+    )
+
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "chat_session_not_found",
+                "message": "The conversation was not found.",
+            },
+        )
+
+    db.delete(session)
+    db.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 def _build_question_graph(repository_name: str, user_id: uuid.UUID, db: Session) -> RepoPilotGraph:
     owned_repository = db.scalar(
@@ -445,39 +678,132 @@ def indexing_status(
 
 def _sse_message(payload: dict[str, Any]) -> str:
     return f"data: {json.dumps(payload)}\n\n"
+def _chat_session_response(session: ChatSession) -> ChatSessionResponse:
+    return ChatSessionResponse(
+        id=str(session.id),
+        repository_name=session.repository.name,
+        title=session.title,
+        created_at=session.created_at,
+        updated_at=session.updated_at,
+    )
 
+
+def _chat_message_response(message: Message) -> ChatMessageResponse:
+    return ChatMessageResponse(
+        id=str(message.id),
+        role=message.role,
+        content=message.content,
+        created_at=message.created_at,
+        evidence=[
+            EvidenceResponse(
+                file_path=item.file_path,
+                symbol=item.symbol or "",
+                symbol_type=item.symbol_type or "",
+                language=item.language or "",
+                start_line=item.start_line,
+                end_line=item.end_line,
+                content=item.snippet,
+                reranker_score=item.reranker_score,
+            )
+            for item in message.evidence
+        ],
+    )
 
 @app.get("/api/questions/stream")
 def stream_question(
     repository_name: str = Query(min_length=1, max_length=255),
     question: str = Query(min_length=1, max_length=4000),
+    session_id: str = Query(min_length=1),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
+    try:
+        chat_session_id = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chat session not found.",
+        )
+
+    chat_session = db.scalar(
+        select(ChatSession).where(
+            ChatSession.id == chat_session_id,
+            ChatSession.user_id == current_user.id,
+        )
+    )
+
+    if chat_session is None or chat_session.repository.name != repository_name:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chat session not found.",
+        )
+
+    # Persist the user's question before starting the background worker.
+    user_message = Message(
+        session_id=chat_session.id,
+        role="user",
+        content=question,
+    )
+    db.add(user_message)
+    db.commit()
+
     events: queue.Queue[dict[str, Any] | None] = queue.Queue()
 
     def run() -> None:
         try:
-            result = _run_question(
-                QuestionRequest(repository_name=repository_name, question=question),
-                current_user.id,
-                db,
-                event_callback=events.put,
-            )
-            events.put({"type": "complete", "response": QuestionResponse(
-                repository_name=repository_name,
-                question=question,
-                answer=result["answer"],
-                document_count=result["document_count"],
-                relevance_grade=result["relevance_grade"],
-                retry_count=result["retry_count"],
-                evidence=result["evidence"],
-            ).model_dump(mode="json")})
+            # Each thread must own its own SQLAlchemy session.
+            with SessionLocal() as worker_db:
+                result = _run_question(
+                    QuestionRequest(
+                        repository_name=repository_name,
+                        question=question,
+                    ),
+                    current_user.id,
+                    worker_db,
+                    event_callback=events.put,
+                )
+
+                response = QuestionResponse(
+                    repository_name=repository_name,
+                    question=question,
+                    answer=result["answer"],
+                    document_count=result["document_count"],
+                    relevance_grade=result["relevance_grade"],
+                    retry_count=result["retry_count"],
+                    evidence=result["evidence"],
+                )
+
+                # Persist the assistant's response and its evidence.
+                assistant_message = Message(
+                    session_id=chat_session_id,
+                    role="assistant",
+                    content=response.answer,
+                )
+
+                for item in response.evidence:
+                    assistant_message.evidence.append(
+                        Evidence(
+                            file_path=item.file_path,
+                            symbol=item.symbol,
+                            symbol_type=item.symbol_type,
+                            language=item.language,
+                            start_line=item.start_line,
+                            end_line=item.end_line,
+                            snippet=item.content,
+                            reranker_score=item.reranker_score,
+                        )
+                    )
+
+                worker_db.add(assistant_message)
+                worker_db.commit()
+
+                events.put({"type": "complete", "response": response.model_dump(mode="json")})
         except ValueError as exc:
             events.put({"type": "error", "code": "repository_not_indexed", "message": str(exc)})
         except RuntimeError:
             events.put({"type": "error", "code": "service_configuration_error", "message": "The answer service is not configured."})
         except Exception:
+            logging.exception("Streaming question failed.")
             events.put({"type": "error", "code": "workflow_failed", "message": "The repository question could not be answered."})
         finally:
             events.put(None)

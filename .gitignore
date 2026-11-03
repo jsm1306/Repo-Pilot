@@ -9,3 +9,5 @@ alembic.ini.local
 chroma_db/
 frontend/node_modules
 tests/
+!tests/
+!tests/*.py

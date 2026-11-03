@@ -17,7 +17,7 @@ class RepoPilotToolAgent:
 
         self.llm = llm.bind_tools(self.tools)
 
-    def run(self, question, repository_name, repository_path):
+    def run(self, question, repository_name, repository_path, user_id=None, repository_id=None):
         messages = [HumanMessage(content=question)]
 
         while True:
@@ -32,8 +32,12 @@ class RepoPilotToolAgent:
                 tool_name = tool_call["name"]
                 tool_args = tool_call["args"]
 
-                tool_args["repository_name"] = repository_name
-                tool_args["repository_path"] = repository_path
+                if tool_name == "search_repository":
+                    tool_args["repository_name"] = repository_name
+                    tool_args["user_id"] = user_id
+                    tool_args["repository_id"] = repository_id
+                elif tool_name == "read_repository_file":
+                    tool_args["repository_path"] = repository_path
 
                 tool = self.tool_map[tool_name]
 

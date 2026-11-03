@@ -22,6 +22,8 @@ def index_repository(
     repo_url: str,
     progress: ProgressCallback | None = None,
     destination: str = "repos",
+    user_id: str | None = None,
+    repository_id: str | None = None,
 ) -> dict[str, Any]:
     def report(stage: str, message: str) -> None:
         if progress:
@@ -30,7 +32,12 @@ def index_repository(
     repository_name = repo_url.rstrip("/").split("/")[-1]
     if repository_name.endswith(".git"):
         repository_name = repository_name[:-4]
-    repo_path = Path(destination) / repository_name
+    if (user_id is None) != (repository_id is None):
+        raise ValueError("Both user_id and repository_id are required for scoped indexing.")
+    repo_root = Path(destination)
+    if user_id is not None:
+        repo_root = repo_root / str(user_id) / str(repository_id)
+    repo_path = repo_root / repository_name
 
     report("cloning", "Preparing repository")
     if repo_path.exists():
@@ -45,7 +52,7 @@ def index_repository(
             raise RuntimeError("A different repository already uses this local destination.")
         report("cloning", "Using the existing local clone")
     else:
-        repo_path = RepositoryLoader(repo_url, destination=destination).clone()
+        repo_path = RepositoryLoader(repo_url, destination=str(repo_root)).clone()
 
     report("analyzing", "Analyzing repository structure")
     report_data = RepositoryAnalyzer(repo_path).analyze()
@@ -78,5 +85,15 @@ def index_repository(
     report("embedding", "Embedding source chunks")
     embeddings = Embedder().embed([chunk.content for chunk in all_chunks])
     report("storing", "Storing repository vectors")
-    VectorStore().add_chunks(all_chunks, embeddings, repository_name)
-    return {"repository_name": repository_name, "chunk_count": len(all_chunks)}
+    VectorStore().add_chunks(
+        all_chunks,
+        embeddings,
+        repository_name,
+        user_id=user_id,
+        repository_id=repository_id,
+    )
+    return {
+        "repository_name": repository_name,
+        "chunk_count": len(all_chunks),
+        "repository_path": str(repo_path),
+    }

@@ -15,6 +15,8 @@ class RepoPilotRetriever(BaseRetriever):
     vector_store: VectorStore
     reranker: Reranker
     repository_name: str
+    user_id: str | None = None
+    repository_id: str | None = None
     n_results: int = 10
     top_k: int = 5
 
@@ -24,7 +26,9 @@ class RepoPilotRetriever(BaseRetriever):
         results = self.vector_store.search(
             query_embedding,
             self.repository_name,
-            n_results=self.n_results
+            n_results=self.n_results,
+            user_id=self.user_id,
+            repository_id=self.repository_id,
         )
 
         documents = results["documents"][0]

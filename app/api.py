@@ -253,15 +253,13 @@ def _build_question_graph(repository_name: str, user_id: uuid.UUID, db: Session)
     if owned_repository is None:
         raise ValueError("repository_not_indexed")
     vector_store = VectorStore()
-    repositories = vector_store.get_repositories()
-    if repository_name not in repositories:
-        raise ValueError("repository_not_indexed")
-
     retriever = RepoPilotRetriever(
         embedder=Embedder(),
         vector_store=vector_store,
         reranker=Reranker(),
         repository_name=repository_name,
+        user_id=str(user_id),
+        repository_id=str(owned_repository.id),
     )
     return RepoPilotGraph(retriever=retriever, llm=RepoPilotLLM())
 
@@ -301,18 +299,18 @@ def _update_job(job_id: str, **changes: Any) -> None:
         })
 
 
-def _index_in_background(job_id: str, repo_url: str, user_id: uuid.UUID) -> None:
+def _index_in_background(
+    job_id: str,
+    repo_url: str,
+    user_id: uuid.UUID,
+    repository_id: uuid.UUID,
+) -> None:
     db = SessionLocal()
     repository_name = repo_url.rstrip("/").split("/")[-1].removesuffix(".git")
     repository: Repository | None = None
     current_stage = "queued"
     try:
-        repository = db.scalar(
-            select(Repository).where(
-                Repository.user_id == user_id,
-                Repository.name == repository_name,
-            )
-        )
+        repository = db.scalar(select(Repository).where(Repository.id == repository_id, Repository.user_id == user_id))
         if repository:
             repository.indexing_status = "running"
             db.commit()
@@ -322,10 +320,18 @@ def _index_in_background(job_id: str, repo_url: str, user_id: uuid.UUID) -> None
             current_stage = stage
             _update_job(job_id, status="running", stage=stage, message=message)
 
-        result = index_repository(repo_url, progress=progress)
+        if repository is None:
+            raise RuntimeError("The repository ownership record was not found.")
+        result = index_repository(
+            repo_url,
+            progress=progress,
+            user_id=str(user_id),
+            repository_id=str(repository.id),
+        )
         if repository:
             repository.indexing_status = "completed"
             repository.indexed_at = datetime.now(timezone.utc)
+            repository.local_path = result.get("repository_path")
             db.commit()
         _update_job(
             job_id,
@@ -346,12 +352,7 @@ def _index_in_background(job_id: str, repo_url: str, user_id: uuid.UUID) -> None
             },
         )
         db.rollback()
-        repository = db.scalar(
-            select(Repository).where(
-                Repository.user_id == user_id,
-                Repository.name == repository_name,
-            )
-        )
+        repository = db.scalar(select(Repository).where(Repository.id == repository_id, Repository.user_id == user_id))
         if repository:
             repository.indexing_status = "failed"
             db.commit()
@@ -421,7 +422,7 @@ def start_indexing(
 
     threading.Thread(
         target=_index_in_background,
-        args=(job_id, request.repo_url, current_user.id),
+        args=(job_id, request.repo_url, current_user.id, repository.id),
         daemon=True,
     ).start()
     return jobs[job_id]

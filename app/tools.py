@@ -8,8 +8,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 @tool
-def search_repository(query: str, repository_name: str) -> str:
+def search_repository(
+    query: str,
+    repository_name: str,
+    user_id: str | None = None,
+    repository_id: str | None = None,
+) -> str:
     """Search the indexed repository for code relevant to the query."""
+
+    if not user_id or not repository_id:
+        return "Repository ownership context is required."
 
     embedder = Embedder()
     vector_store = VectorStore()
@@ -20,7 +28,9 @@ def search_repository(query: str, repository_name: str) -> str:
     results = vector_store.search(
         query_embedding,
         repository_name,
-        n_results=10
+        n_results=10,
+        user_id=user_id,
+        repository_id=repository_id,
     )
 
     documents = results["documents"][0]
@@ -58,6 +68,12 @@ def read_repository_file(file_path: str, repository_path: str) -> str:
     """Read the complete contents of a file from the repository."""
 
     path = Path(repository_path) / file_path
+    try:
+        path = path.resolve()
+        repository_root = Path(repository_path).resolve()
+        path.relative_to(repository_root)
+    except ValueError:
+        return "File path is outside the repository."
 
     if not path.exists():
         return f"File not found: {file_path}"

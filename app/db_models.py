@@ -63,8 +63,8 @@ class Repository(Base):
     indexed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     user: Mapped[User] = relationship(back_populates="repositories")
-    chat_sessions: Mapped[list[ChatSession]] = relationship(back_populates="repository", cascade="all, delete-orphan")
-    indexing_jobs: Mapped[list[IndexingJob]] = relationship(back_populates="repository", cascade="all, delete-orphan")
+    chat_sessions: Mapped[list[ChatSession]] = relationship(back_populates="repository", cascade="all, delete-orphan", overlaps="chat_sessions")
+    indexing_jobs: Mapped[list[IndexingJob]] = relationship(back_populates="repository", cascade="all, delete-orphan", overlaps="indexing_jobs")
 
 
 class ChatSession(Base):
@@ -86,8 +86,8 @@ class ChatSession(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"), onupdate=lambda: datetime.now(timezone.utc))
 
-    user: Mapped[User] = relationship(back_populates="chat_sessions")
-    repository: Mapped[Repository] = relationship(back_populates="chat_sessions")
+    user: Mapped[User] = relationship(back_populates="chat_sessions", overlaps="chat_sessions")
+    repository: Mapped[Repository] = relationship(back_populates="chat_sessions", overlaps="chat_sessions,user")
     messages: Mapped[list[Message]] = relationship(back_populates="session", cascade="all, delete-orphan", order_by="Message.created_at")
 
 
@@ -158,5 +158,5 @@ class IndexingJob(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
-    user: Mapped[User] = relationship(back_populates="indexing_jobs")
-    repository: Mapped[Repository] = relationship(back_populates="indexing_jobs")
+    user: Mapped[User] = relationship(back_populates="indexing_jobs", overlaps="indexing_jobs",)
+    repository: Mapped[Repository] = relationship(back_populates="indexing_jobs",  overlaps="indexing_jobs,user")

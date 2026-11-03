@@ -1,4 +1,6 @@
-import { useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
+import { Children, isValidElement, useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "secondary" | "ghost" | "danger";
@@ -111,79 +113,38 @@ export function CodeLine({ number, children, changed }: { number: number; childr
   );
 }
 
-function renderInline(text: string): ReactNode[] {
-  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
-  return parts.map((part, index) => {
-    if (part.startsWith("`") && part.endsWith("`")) {
-      return <code key={index}>{part.slice(1, -1)}</code>;
-    }
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={index}>{part.slice(2, -2)}</strong>;
-    }
-    return <span key={index}>{part}</span>;
-  });
-}
-
 export function MarkdownAnswer({ markdown }: { markdown: string }) {
-  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
-  const blocks: ReactNode[] = [];
-  let paragraph: string[] = [];
-  let list: string[] = [];
-  let code: string[] = [];
-  let inCode = false;
-
-  const flushParagraph = () => {
-    if (paragraph.length) {
-      blocks.push(<p key={`p-${blocks.length}`}>{renderInline(paragraph.join(" "))}</p>);
-      paragraph = [];
+  function getCodeText(children: ReactNode): string {
+    const child = Children.toArray(children)[0];
+    if (isValidElement<{ children?: ReactNode }>(child)) {
+      return String(child.props.children ?? "").replace(/\n$/, "");
     }
-  };
-  const flushList = () => {
-    if (list.length) {
-      blocks.push(<ul key={`ul-${blocks.length}`}>{list.map((item, index) => <li key={index}>{renderInline(item)}</li>)}</ul>);
-      list = [];
-    }
-  };
-
-  lines.forEach((line) => {
-    if (line.trim().startsWith("```")) {
-      if (inCode) {
-        const codeText = code.join("\n");
-        blocks.push(<div className="answer-code-wrap" key={`code-${blocks.length}`}><CopyCodeButton code={codeText} /><pre className="answer-code"><code>{codeText}</code></pre></div>);
-        code = [];
-      } else {
-        flushParagraph();
-        flushList();
-      }
-      inCode = !inCode;
-      return;
-    }
-    if (inCode) {
-      code.push(line);
-      return;
-    }
-    const heading = line.match(/^(#{1,3})\s+(.+)$/);
-    if (heading) {
-      flushParagraph();
-      flushList();
-      blocks.push(<h3 key={`h-${blocks.length}`}>{renderInline(heading[2])}</h3>);
-    } else if (/^\s*[-*]\s+/.test(line)) {
-      flushParagraph();
-      list.push(line.replace(/^\s*[-*]\s+/, ""));
-    } else if (line.trim()) {
-      paragraph.push(line.trim());
-    } else {
-      flushParagraph();
-      flushList();
-    }
-  });
-  flushParagraph();
-  flushList();
-  if (inCode && code.length) {
-    const codeText = code.join("\n");
-    blocks.push(<div className="answer-code-wrap" key={`code-${blocks.length}`}><CopyCodeButton code={codeText} /><pre className="answer-code"><code>{codeText}</code></pre></div>);
+    return String(children).replace(/\n$/, "");
   }
-  return <div className="markdown-answer">{blocks}</div>;
+
+  return (
+    <div className="markdown-answer">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          code({ className, children, ...props }) {
+            return <code className={className} {...props}>{children}</code>;
+          },
+          pre({ children }) {
+            const codeText = getCodeText(children);
+            return (
+              <div className="answer-code-wrap">
+                <CopyCodeButton code={codeText} />
+                <pre className="answer-code">{children}</pre>
+              </div>
+            );
+          },
+        }}
+      >
+        {markdown}
+      </ReactMarkdown>
+    </div>
+  );
 }
 
 export function AnimatedMarkdownAnswer({ markdown }: { markdown: string }) {

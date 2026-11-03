@@ -1,16 +1,25 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Alert, AnimatedMarkdownAnswer, Button, StatusBadge, TextArea, TextInput } from "./components";
-import { getCurrentUser, getIndexingStatus, getRepositories, loginWithGoogle, logout, startIndexing, streamQuestion, type AuthUser, type Evidence, type IndexJob, type InvestigationStage, type QuestionResponse } from "./api";
+import { Alert, AnimatedMarkdownAnswer, Button, MarkdownAnswer, StatusBadge, TextArea, TextInput } from "./components";
+import { getCurrentUser, getIndexingStatus, getRepositories, createChatSession, getChatSessions, getChatSession, loginWithGoogle, logout, startIndexing, streamQuestion, type AuthUser, type ChatSession, type ChatSessionDetail, type Evidence, type IndexJob, type InvestigationStage, type QuestionResponse } from "./api";
 
 type Theme = "light" | "dark";
+
+type ConversationResponse = {
+  answer: string;
+  evidence: Evidence[];
+  relevance_grade?: string;
+  document_count?: number;
+  retry_count?: number;
+};
 
 type ConversationTurn = {
   id: string;
   question: string;
-  response: QuestionResponse | null;
+  response: ConversationResponse | null;
   error: string;
   stages: Record<string, InvestigationStage>;
   isLoading: boolean;
+  animateResponse: boolean;
 };
 
 function InvestigationTrail({ stages }: { stages: Record<string, InvestigationStage> }) {
@@ -43,6 +52,9 @@ function App() {
   const [showIndexing, setShowIndexing] = useState(false);
   const [expandedEvidence, setExpandedEvidence] = useState<Record<string, boolean>>({});
   const [conversation, setConversation] = useState<ConversationTurn[]>([]);
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState("");
@@ -77,7 +89,32 @@ function App() {
       .catch((requestError: Error) => setError(requestError.message))
       .finally(() => setIsLoadingRepositories(false));
   }, [authUser]);
+  useEffect(() => {
+    if (!authUser || !repositoryName) {
+      setChatSessions([]);
+      return;
+    }
 
+    let cancelled = false;
+    setIsLoadingSessions(true);
+
+    getChatSessions(repositoryName)
+      .then(({ sessions }) => {
+        if (!cancelled) {
+          setChatSessions(sessions);
+        }
+      })
+      .catch((requestError: Error) => {
+        if (!cancelled) setError(requestError.message);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingSessions(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser, repositoryName]);
   useEffect(() => {
     if (authUser || !googleClientId || !googleButton.current) return;
     let cancelled = false;
@@ -142,40 +179,136 @@ function App() {
       .then(setIndexJob)
       .catch((requestError: Error) => setIndexError(requestError.message));
   }
-
-  function submitQuery() {
-    const question = query.trim();
-    if (!question || !repositoryName || conversation.some((turn) => turn.isLoading)) return;
-    const turnId = `${Date.now()}-${conversation.length}`;
-    const turn: ConversationTurn = {
-      id: turnId,
-      question,
-      response: null,
-      error: "",
-      stages: {},
-      isLoading: true,
-    };
-    setConversation((current) => [...current, turn]);
-    setQuery("");
+  async function openChatSession(session: ChatSession) {
+  try {
     setError("");
-    window.requestAnimationFrame(() => {
-      conversationRef.current?.scrollTo({
-        top: conversationRef.current.scrollHeight,
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-      });
-    });
-    streamQuestion(repositoryName, question, (stage) => {
-      setConversation((current) => current.map((item) => item.id === turnId
-        ? { ...item, stages: { ...item.stages, [stage.stage]: stage } }
-        : item));
-    })
-      .then((response) => setConversation((current) => current.map((item) => item.id === turnId
-        ? { ...item, response, isLoading: false }
-        : item)))
-      .catch((requestError: Error) => setConversation((current) => current.map((item) => item.id === turnId
-        ? { ...item, error: requestError.message, isLoading: false }
-        : item)));
+
+    const detail = await getChatSession(session.id);
+
+    const restoredConversation: ConversationTurn[] = [];
+    let pendingTurn: ConversationTurn | null = null;
+
+    for (const message of detail.messages) {
+      if (message.role === "user") {
+        pendingTurn = {
+          id: message.id,
+          question: message.content,
+          response: null,
+          error: "",
+          stages: {},
+          isLoading: false,
+          animateResponse: false,
+        };
+
+        restoredConversation.push(pendingTurn);
+      } else if (message.role === "assistant" && pendingTurn) {
+        pendingTurn.response = {
+          answer: message.content,
+          evidence: message.evidence,
+        };
+        pendingTurn.isLoading = false;
+        pendingTurn.animateResponse = false;
+
+        pendingTurn = null;
+      }
+    }
+
+    setConversation(restoredConversation);
+    setActiveSessionId(session.id);
+    setExpandedEvidence({});
+  } catch (requestError) {
+    setError((requestError as Error).message);
   }
+}
+  async function submitQuery() {
+  const question = query.trim();
+
+  if (!question || !repositoryName || conversation.some((turn) => turn.isLoading)) {
+    return;
+  }
+
+  const turnId = `${Date.now()}-${conversation.length}`;
+
+  const turn: ConversationTurn = {
+    id: turnId,
+    question,
+    response: null,
+    error: "",
+    stages: {},
+    isLoading: true,
+    animateResponse: true,
+  };
+
+  setConversation((current) => [...current, turn]);
+  setQuery("");
+  setError("");
+
+  window.requestAnimationFrame(() => {
+    conversationRef.current?.scrollTo({
+      top: conversationRef.current.scrollHeight,
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+    });
+  });
+
+  try {
+    let sessionId = activeSessionId;
+
+    // Create a persistent session for the first question.
+    if (!sessionId) {
+      const session = await createChatSession(
+        repositoryName,
+        question.slice(0, 80),
+      );
+
+      sessionId = session.id;
+      setActiveSessionId(session.id);
+      setChatSessions((current) => [session, ...current]);
+    }
+
+    const response = await streamQuestion(
+      repositoryName,
+      question,
+      sessionId,
+      (stage: InvestigationStage) => {
+        setConversation((current) =>
+          current.map((item) =>
+            item.id === turnId
+              ? {
+                  ...item,
+                  stages: {
+                    ...item.stages,
+                    [stage.stage]: stage,
+                  },
+                }
+              : item,
+          ),
+        );
+      },
+    );
+
+    setConversation((current) =>
+      current.map((item) =>
+        item.id === turnId
+          ? { ...item, response, isLoading: false }
+          : item,
+      ),
+    );
+  } catch (requestError) {
+    setConversation((current) =>
+      current.map((item) =>
+        item.id === turnId
+          ? {
+              ...item,
+              error: (requestError as Error).message,
+              isLoading: false,
+            }
+          : item,
+      ),
+    );
+  }
+}
 
   if (authLoading) {
     return <div className="auth-gate"><div className="loading-state" role="status"><span className="loading-bar" /><strong>Preparing your workspace…</strong></div></div>;
@@ -225,6 +358,7 @@ function App() {
             className="repository-selector"
             value={repositoryName}
             onChange={(event) => {
+              setActiveSessionId(null);
               setRepositoryName(event.target.value);
               setConversation([]);
             }}
@@ -269,6 +403,7 @@ function App() {
                 className={`repo-item ${name === repositoryName ? "repo-item-active" : ""}`}
                 key={name}
                 onClick={() => {
+                  setActiveSessionId(null);
                   setRepositoryName(name);
                   setConversation([]);
                 }}
@@ -280,6 +415,53 @@ function App() {
             ))}
             {!isLoadingRepositories && repositories.length === 0 && (
               <p className="field-hint">No indexed repositories yet.</p>
+            )}
+          </div>
+          <div className="rail-section">
+            <div className="rail-heading">
+              <span>Conversations</span>
+              <span className="mono">{chatSessions.length}</span>
+            </div>
+
+            <button
+              className="repo-item"
+              onClick={() => {
+                setActiveSessionId(null);
+                setConversation([]);
+                setExpandedEvidence({});
+                setError("");
+              }}
+            >
+              <span className="repo-glyph">+</span>
+              <span>
+                <strong>New conversation</strong>
+                <small>Start a fresh discussion</small>
+              </span>
+            </button>
+
+            {isLoadingSessions && (
+              <p className="field-hint">Loading conversations…</p>
+            )}
+
+            {!isLoadingSessions && chatSessions.map((session) => (
+              <button
+                className={`repo-item ${session.id === activeSessionId ? "repo-item-active" : ""}`}
+                key={session.id}
+                onClick={() => openChatSession(session)}
+              >
+                <span className="repo-glyph">C</span>
+                <span>
+                  <strong>{session.title || "Untitled conversation"}</strong>
+                  <small>{new Date(session.updated_at).toLocaleDateString()}</small>
+                </span>
+                {session.id === activeSessionId && (
+                  <span className="active-dot" aria-label="Currently selected" />
+                )}
+              </button>
+            ))}
+
+            {!isLoadingSessions && chatSessions.length === 0 && (
+              <p className="field-hint">No conversations yet.</p>
             )}
           </div>
           <div className="rail-footer">
@@ -315,7 +497,13 @@ function App() {
                     <div className="assistant-heading">
                       <span className="assistant-mark" aria-hidden="true">R</span>
                       <span>RepoPilot</span>
-                      {turn.response && <StatusBadge tone={turn.response.relevance_grade === "RELEVANT" ? "evidence" : "warning"}>{turn.response.relevance_grade === "RELEVANT" ? "Grounded" : "Needs review"}</StatusBadge>}
+                      {turn.response?.relevance_grade && (
+                          <StatusBadge
+                            tone={turn.response.relevance_grade === "RELEVANT" ? "evidence" : "warning"}
+                          >
+                            {turn.response.relevance_grade === "RELEVANT" ? "Grounded" : "Needs review"}
+                          </StatusBadge>
+                        )}
                     </div>
                     {turn.isLoading ? (
                       <div className="loading-state conversation-loading" role="status">
@@ -329,8 +517,15 @@ function App() {
                     ) : turn.response ? (
                       <>
                         <div className="answer">
-                          <AnimatedMarkdownAnswer markdown={turn.response.answer} />
-                          <p>{turn.response.document_count} source chunks were retrieved and graded {turn.response.relevance_grade.toLowerCase()}.</p>
+                          {turn.animateResponse
+                            ? <AnimatedMarkdownAnswer markdown={turn.response.answer} />
+                            : <MarkdownAnswer markdown={turn.response.answer} />}
+                          {turn.response.document_count !== undefined && (
+                            <p>
+                              {turn.response.document_count} source chunks were retrieved and graded{" "}
+                              {turn.response.relevance_grade?.toLowerCase() ?? "unknown"}.
+                            </p>
+                          )}
                         </div>
                         {evidence.length > 0 && (
                           <details className="sources-disclosure">

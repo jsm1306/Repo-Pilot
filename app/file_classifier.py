@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 
 class FileClassifier:
@@ -28,10 +29,21 @@ class FileClassifier:
 
     CONFIGURATION_FILES = {
         "dockerfile",
+        "containerfile",
+        "jenkinsfile",
+        "makefile",
+        "procfile",
+        "justfile",
+        "vagrantfile",
         "docker-compose.yml",
         "docker-compose.yaml",
+        ".dockerignore",
         ".gitignore",
+        ".gitattributes",
         ".env.example",
+        ".env.sample",
+        ".env.template",
+        "nginx.conf",
     }
 
     DEPENDENCY_FILES = {
@@ -48,6 +60,7 @@ class FileClassifier:
         ".env.production",
         ".env.development",
     }
+    SAFE_TEMPLATE_FILES = {".env.example", ".env.sample", ".env.template"}
 
     DATA_EXTENSIONS = {
         ".csv",
@@ -55,6 +68,15 @@ class FileClassifier:
         ".sqlite",
         ".sqlite3",
         ".db",
+    }
+
+    CONFIGURATION_EXTENSIONS = {
+        ".conf",
+        ".ini",
+        ".json",
+        ".toml",
+        ".yaml",
+        ".yml",
     }
 
     ASSET_EXTENSIONS = {
@@ -75,7 +97,7 @@ class FileClassifier:
         filename = file_path.name.lower()
         extension = file_path.suffix.lower()
 
-        if filename in self.SECRET_FILES:
+        if self.is_secret_file(file_path):
             return "secret"
 
         if filename in self.DEPENDENCY_FILES:
@@ -87,6 +109,9 @@ class FileClassifier:
         if extension in self.SOURCE_EXTENSIONS:
             return "source"
 
+        if extension in self.CONFIGURATION_EXTENSIONS:
+            return "configuration"
+
         if extension in self.DOCUMENTATION_EXTENSIONS:
             return "documentation"
 
@@ -97,3 +122,17 @@ class FileClassifier:
             return "asset"
 
         return "unknown"
+
+    def is_secret_file(self, file_path: Path) -> bool:
+        filename = file_path.name.lower()
+        if filename in self.SAFE_TEMPLATE_FILES:
+            return False
+        return filename in self.SECRET_FILES or bool(re.fullmatch(r"\.env\..+", filename))
+
+    def is_indexable(self, file_path: Path) -> bool:
+        return self.classify(file_path) in {
+            "source",
+            "documentation",
+            "configuration",
+            "dependency",
+        }

@@ -49,6 +49,8 @@ def test_readme_only_repository_is_indexed(monkeypatch, tmp_path):
     assert captured["stored"][2] == "readme-only"
     assert captured["stored"][3] == {"user_id": "user-a", "repository_id": "repo-a"}
     assert captured["stored"][0][0].file_path == "README.md"
+    assert result["indexing_stats"]["files_included"] == 1
+    assert result["indexing_stats"]["chunks_generated"] == 1
 
 
 def test_code_and_markdown_files_are_collected(tmp_path):
@@ -58,6 +60,100 @@ def test_code_and_markdown_files_are_collected(tmp_path):
     files = CodeReader(str(tmp_path)).read_source_files()
 
     assert {item["path"] for item in files} == {"app.py", "README.md"}
+
+
+@pytest.mark.parametrize("filename", ["Dockerfile", "Jenkinsfile", "Makefile"])
+def test_extensionless_build_files_are_collected(tmp_path, filename):
+    (tmp_path / filename).write_text("FROM python:3.13\n", encoding="utf-8")
+
+    files = CodeReader(str(tmp_path)).read_source_files()
+
+    assert [item["path"] for item in files] == [filename]
+
+
+def test_configuration_and_workflow_files_are_collected(tmp_path):
+    (tmp_path / ".dockerignore").write_text("node_modules\n", encoding="utf-8")
+    (tmp_path / ".gitignore").write_text(".venv\n", encoding="utf-8")
+    (tmp_path / "docker-compose.yml").write_text("services:\n  api:\n    build: .\n", encoding="utf-8")
+    (tmp_path / "requirements.txt").write_text("fastapi\n", encoding="utf-8")
+    workflow = tmp_path / ".github" / "workflows"
+    workflow.mkdir(parents=True)
+    (workflow / "ci.yml").write_text("name: CI\n", encoding="utf-8")
+
+    reader = CodeReader(str(tmp_path))
+    files = reader.read_source_files()
+
+    assert {item["path"].replace("\\", "/") for item in files} == {
+        ".dockerignore",
+        ".gitignore",
+        "docker-compose.yml",
+        "requirements.txt",
+        ".github/workflows/ci.yml",
+    }
+
+
+def test_exclusions_report_meaningful_reasons(tmp_path):
+    (tmp_path / ".env").write_text("TOKEN=secret\n", encoding="utf-8")
+    (tmp_path / ".env.production.local").write_text("TOKEN=secret\n", encoding="utf-8")
+    (tmp_path / ".env.example").write_text("TOKEN=replace-me\n", encoding="utf-8")
+    (tmp_path / "app.pyc").write_bytes(b"\x00\x01")
+    ignored = tmp_path / "node_modules"
+    ignored.mkdir()
+    (ignored / "package.js").write_text("ignored", encoding="utf-8")
+
+    reader = CodeReader(str(tmp_path))
+    files = reader.read_source_files()
+    assert [item["path"] for item in files] == [".env.example"]
+    reasons = {
+        item["path"].replace("\\", "/"): item["reason"]
+        for item in reader.stats["excluded_files"]
+    }
+
+    assert reasons[".env"] == "secret_file"
+    assert reasons["app.pyc"] == "generated_artifact"
+    assert reader.stats["directories_pruned"] == 1
+
+
+def test_procfile_chunks_process_declarations():
+    chunks = StructuralChunker().chunk_file(
+        "Procfile",
+        "web: gunicorn app:app\nworker: celery -A app worker\nrelease: python manage.py migrate",
+    )
+
+    assert [chunk.symbol for chunk in chunks] == ["web", "worker", "release"]
+    assert all(chunk.language == "procfile" for chunk in chunks)
+
+
+def test_jenkinsfile_chunks_declarative_pipeline_boundaries():
+    chunks = StructuralChunker().chunk_file(
+        "Jenkinsfile",
+        """pipeline {
+  agent any
+  stages {
+    stage('Build') {
+      steps {
+        sh 'make build'
+      }
+    }
+  }
+}""",
+    )
+
+    assert [chunk.symbol for chunk in chunks] == ["pipeline", "stages", "stage('Build')", "steps"]
+    assert all(chunk.language == "jenkinsfile" for chunk in chunks)
+    assert "sh 'make build'" in chunks[-1].content
+
+
+def test_structural_chunker_preserves_configuration_file_types():
+    chunker = StructuralChunker()
+
+    docker_chunks = chunker.chunk_file("Dockerfile", "FROM python:3.13\nWORKDIR /app\nCOPY . .")
+    yaml_chunks = chunker.chunk_file("docker-compose.yml", "services:\n  api:\n    build: .")
+
+    assert docker_chunks
+    assert docker_chunks[0].language == "dockerfile"
+    assert yaml_chunks
+    assert yaml_chunks[0].language == "yaml"
 
 
 def test_repository_with_no_supported_files_fails_clearly(monkeypatch, tmp_path):
@@ -70,7 +166,7 @@ def test_repository_with_no_supported_files_fails_clearly(monkeypatch, tmp_path)
         def clone(self):
             repo_path = self.destination / "empty"
             (repo_path / ".git").mkdir(parents=True)
-            (repo_path / "config.json").write_text("{}", encoding="utf-8")
+            (repo_path / "image.png").write_bytes(b"\x89PNG")
             return repo_path
 
     _patch_analysis_dependencies(monkeypatch)

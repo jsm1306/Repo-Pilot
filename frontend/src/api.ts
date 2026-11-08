@@ -71,6 +71,16 @@ export type IndexJob = {
   message: string;
   repository_name: string | null;
   chunk_count: number | null;
+  indexing_stats: {
+    files_discovered: number;
+    files_included: number;
+    files_excluded: number;
+    files_chunked: number;
+    files_with_zero_chunks: string[];
+    chunks_generated: number;
+    exclusion_reasons: Record<string, number>;
+    directories_pruned: number;
+  } | null;
   error: string | null;
   completed_stages: string[];
   updated_at: string;

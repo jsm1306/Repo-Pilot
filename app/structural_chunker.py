@@ -26,6 +26,21 @@ class StructuralChunker:
         ".jsx": "javascript",
         ".ts": "typescript",
         ".tsx": "typescript",
+        ".json": "json",
+        ".toml": "toml",
+        ".yaml": "yaml",
+        ".yml": "yaml",
+        ".conf": "config",
+        ".ini": "config",
+    }
+    EXTENSIONLESS_LANGUAGE_MAP = {
+        "dockerfile": "dockerfile",
+        "containerfile": "dockerfile",
+        "jenkinsfile": "jenkinsfile",
+        "makefile": "makefile",
+        "procfile": "procfile",
+        "justfile": "justfile",
+        "vagrantfile": "ruby",
     }
 
     def __init__(self):
@@ -42,11 +57,43 @@ class StructuralChunker:
         return parser
 
     def chunk_file(self, file_path, content):
-        extension = "." + file_path.split(".")[-1].lower()
-        language = self.LANGUAGE_MAP.get(extension)
+        filename = file_path.replace("\\", "/").rsplit("/", 1)[-1].lower()
+        extension = "." + filename.rsplit(".", 1)[-1] if "." in filename else ""
+        language = self.EXTENSIONLESS_LANGUAGE_MAP.get(filename) or self.LANGUAGE_MAP.get(extension)
 
         if extension in {".md", ".mdx"}:
             return self._markdown_chunks(file_path, content)
+
+        if language == "dockerfile":
+            return self._directive_chunks(file_path, content, "dockerfile", r"^[A-Z][A-Z0-9_-]*\b.*$")
+
+        if language == "procfile":
+            return self._directive_chunks(
+                file_path,
+                content,
+                language,
+                r"^\s*(?:web|worker|release)(?:-[A-Za-z0-9_.-]+)?\s*:",
+            )
+
+        if language == "jenkinsfile":
+            return self._directive_chunks(
+                file_path,
+                content,
+                language,
+                r"^\s*(?:pipeline\b|stages\b|stage\s*\(|steps\b)",
+            )
+
+        if language in {"makefile", "justfile"}:
+            pattern = r"^\s*[A-Za-z0-9_.-]+\s*:"
+            return self._directive_chunks(file_path, content, language, pattern)
+
+        if language in {"yaml", "json", "toml", "config"}:
+            return self._directive_chunks(
+                file_path,
+                content,
+                language,
+                r"^(?:[A-Za-z0-9_.-]+:|\[[^\]]+\]|\"[^\"]+\"\s*:)",
+            )
 
         if language not in self.parsers:
             return self._fallback_chunks(file_path, content, language or "unknown")
@@ -55,6 +102,38 @@ class StructuralChunker:
             return self._python_chunks(file_path, content)
 
         return self._tree_sitter_chunks(file_path, content, language)
+
+    def _directive_chunks(self, file_path, content, language, pattern, chunk_size=50):
+        lines = content.splitlines()
+        if not lines:
+            return []
+
+        boundaries = [
+            index for index, line in enumerate(lines)
+            if re.match(pattern, line.strip() if language == "dockerfile" else line)
+        ]
+        if not boundaries:
+            return self._fallback_chunks(file_path, content, language, chunk_size, 0)
+        if boundaries[0] > 0:
+            boundaries.insert(0, 0)
+
+        chunks = []
+        for index, start in enumerate(boundaries):
+            end = boundaries[index + 1] if index + 1 < len(boundaries) else len(lines)
+            for position in range(start, end, chunk_size):
+                stop = min(position + chunk_size, end)
+                chunk_content = "\n".join(lines[position:stop]).strip()
+                if chunk_content:
+                    chunks.append(CodeChunk(
+                        file_path=file_path,
+                        content=chunk_content,
+                        start_line=position + 1,
+                        end_line=stop,
+                        language=language,
+                        symbol=lines[start].strip().split(" ", 1)[0].rstrip(":="),
+                        symbol_type="directive",
+                    ))
+        return chunks
     
     def _add_uncovered_chunks(self, file_path, content, language, chunks):
         lines = content.splitlines()

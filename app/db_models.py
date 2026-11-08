@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from typing import Any
-
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
@@ -66,6 +66,52 @@ class Repository(Base):
     chat_sessions: Mapped[list[ChatSession]] = relationship(back_populates="repository", cascade="all, delete-orphan", overlaps="chat_sessions")
     indexing_jobs: Mapped[list[IndexingJob]] = relationship(back_populates="repository", cascade="all, delete-orphan", overlaps="indexing_jobs")
 
+
+class RepositoryChunk(Base):
+    __tablename__ = "repository_chunks"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["repository_id", "user_id"],
+            ["repositories.id", "repositories.user_id"],
+            ondelete="CASCADE",
+            name="fk_repository_chunks_repository_owner",
+        ),
+        Index(
+            "ix_repository_chunks_owner_repository",
+            "user_id",
+            "repository_id",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    repository_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=False,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=False,
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(
+        Vector(384),
+        nullable=False,
+    )
+    file_path: Mapped[str] = mapped_column(String(2048), nullable=False)
+    language: Mapped[str | None] = mapped_column(String(64))
+    start_line: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_line: Mapped[int] = mapped_column(Integer, nullable=False)
+    symbol: Mapped[str | None] = mapped_column(String(512))
+    symbol_type: Mapped[str | None] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
 
 class ChatSession(Base):
     __tablename__ = "chat_sessions"

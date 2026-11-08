@@ -1,4 +1,5 @@
 from collections.abc import Callable
+import logging
 from pathlib import Path
 import subprocess
 from typing import Any
@@ -16,6 +17,7 @@ from app.documentation_reader import DocumentationReader
 from app.vector_store import VectorStore
 
 ProgressCallback = Callable[[str, str], None]
+logger = logging.getLogger(__name__)
 
 
 def index_repository(
@@ -70,14 +72,34 @@ def index_repository(
     report_data.databases = technologies["databases"]
     report_data.tools = technologies["tools"]
     report("reading", "Reading source files")
-    source_files = CodeReader(repo_path).read_source_files()
+    reader = CodeReader(repo_path)
+    source_files = reader.read_source_files()
+    discovery_stats = reader.stats
     DocumentationReader(repo_path).read_documents()
 
     report("chunking", "Chunking source files")
     chunker = StructuralChunker()
     all_chunks = []
+    files_with_zero_chunks = []
     for source_file in source_files:
-        all_chunks.extend(chunker.chunk_file(source_file["path"], source_file["content"]))
+        chunks = chunker.chunk_file(source_file["path"], source_file["content"])
+        if not chunks:
+            files_with_zero_chunks.append(source_file["path"])
+        all_chunks.extend(chunks)
+
+    stats = {
+        **discovery_stats,
+        "files_chunked": len(source_files) - len(files_with_zero_chunks),
+        "files_with_zero_chunks": files_with_zero_chunks,
+        "chunks_generated": len(all_chunks),
+    }
+    logger.info(
+        "Repository indexing coverage: included=%d chunked=%d zero_chunks=%d chunks=%d",
+        stats["files_included"],
+        stats["files_chunked"],
+        len(files_with_zero_chunks),
+        stats["chunks_generated"],
+    )
 
     if not all_chunks:
         raise RuntimeError("No supported source files were found in the repository.")
@@ -96,4 +118,5 @@ def index_repository(
         "repository_name": repository_name,
         "chunk_count": len(all_chunks),
         "repository_path": str(repo_path),
+        "indexing_stats": stats,
     }

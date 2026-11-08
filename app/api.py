@@ -143,6 +143,7 @@ class IndexJobResponse(BaseModel):
     message: str
     repository_name: str | None = None
     chunk_count: int | None = None
+    indexing_stats: dict[str, Any] | None = None
     error: str | None = None
     completed_stages: list[str] = Field(default_factory=list)
     updated_at: datetime
@@ -573,6 +574,7 @@ def _index_in_background(
             message="Repository indexing completed.",
             repository_name=result["repository_name"],
             chunk_count=result["chunk_count"],
+            indexing_stats=result["indexing_stats"],
             completed_stages=["cloning", "analyzing", "reading", "chunking", "embedding", "storing"],
         )
     except Exception as exc:

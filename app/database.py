@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
+project_root = Path(__file__).resolve().parent.parent
+load_dotenv(project_root / ".env.local")
 load_dotenv(Path(__file__).with_name(".env"))
 
 

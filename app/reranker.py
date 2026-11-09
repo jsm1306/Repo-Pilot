@@ -1,8 +1,13 @@
 from sentence_transformers import CrossEncoder
 
 class Reranker:
-    def __init__(self,model_name="cross-encoder/ms-marco-MiniLM-L-6-v2"):
+    def __init__(
+        self,
+        model_name="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        batch_size=4,
+    ):
         self.model=CrossEncoder(model_name)
+        self.batch_size = batch_size
 
     def rerank(self,query,documents,metadatas,top_k=5):
         candidates=[]
@@ -17,7 +22,7 @@ Code:
             candidates.append(context)
 
         pairs=[(query,context) for context in candidates]
-        scores=self.model.predict(pairs)
+        scores=self.model.predict(pairs, batch_size=self.batch_size)
 
         ranked=sorted(
             zip(documents,metadatas,scores),

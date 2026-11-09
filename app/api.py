@@ -4,6 +4,7 @@ import uuid
 import json
 import queue
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
@@ -156,7 +157,16 @@ INDEX_STAGES = ["cloning", "analyzing", "reading", "chunking", "embedding", "sto
 logger = logging.getLogger(__name__)
 
 
-app = FastAPI(title="RepoPilot API")
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    embedder = Embedder()
+    embedder.load()
+    application.state.embedder = embedder
+    application.state.reranker = Reranker()
+    application.state.llm = RepoPilotLLM()
+    yield
+
+app = FastAPI(title="RepoPilot API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
@@ -476,7 +486,15 @@ def delete_chat_session(
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-def _build_question_graph(repository_name: str, user_id: uuid.UUID, db: Session) -> RepoPilotGraph:
+def _build_question_graph(
+    repository_name: str,
+    user_id: uuid.UUID,
+    db: Session,
+    *,
+    embedder: Embedder,
+    reranker: Reranker,
+    llm: RepoPilotLLM,
+) -> RepoPilotGraph:
     owned_repository = db.scalar(
         select(Repository).where(
             Repository.user_id == user_id,
@@ -486,25 +504,36 @@ def _build_question_graph(repository_name: str, user_id: uuid.UUID, db: Session)
     )
     if owned_repository is None:
         raise ValueError("repository_not_indexed")
-    vector_store = VectorStore()
+    vector_store = VectorStore(db)
     retriever = RepoPilotRetriever(
-        embedder=Embedder(),
+        embedder=embedder,
         vector_store=vector_store,
-        reranker=Reranker(),
+        reranker=reranker,
         repository_name=repository_name,
         user_id=str(user_id),
         repository_id=str(owned_repository.id),
     )
-    return RepoPilotGraph(retriever=retriever, llm=RepoPilotLLM())
+    return RepoPilotGraph(retriever=retriever, llm=llm)
 
 
 def _run_question(
     request: QuestionRequest,
     user_id: uuid.UUID,
     db: Session,
+    *,
+    embedder: Embedder,
+    reranker: Reranker,
+    llm: RepoPilotLLM,
     event_callback: Any = None,
 ) -> dict[str, Any]:
-    return _build_question_graph(request.repository_name, user_id, db).run_with_state(
+    return _build_question_graph(
+        request.repository_name,
+        user_id,
+        db,
+        embedder=embedder,
+        reranker=reranker,
+        llm=llm,
+    ).run_with_state(
         request.question,
         event_callback=event_callback,
     )
@@ -713,6 +742,7 @@ def _chat_message_response(message: Message) -> ChatMessageResponse:
 
 @app.get("/api/questions/stream")
 def stream_question(
+    http_request: Request,
     repository_name: str = Query(min_length=1, max_length=255),
     question: str = Query(min_length=1, max_length=4000),
     session_id: str = Query(min_length=1),
@@ -762,6 +792,9 @@ def stream_question(
                     ),
                     current_user.id,
                     worker_db,
+                    embedder=http_request.app.state.embedder,
+                    reranker=http_request.app.state.reranker,
+                    llm=http_request.app.state.llm,
                     event_callback=events.put,
                 )
 
@@ -840,7 +873,14 @@ def ask_question(
 ) -> QuestionResponse:
     require_csrf(http_request)
     try:
-        result = _run_question(request, current_user.id, db)
+        result = _run_question(
+            request,
+            current_user.id,
+            db,
+            embedder=http_request.app.state.embedder,
+            reranker=http_request.app.state.reranker,
+            llm=http_request.app.state.llm,
+        )
     except ValueError as exc:
         if str(exc) == "repository_not_indexed":
             raise HTTPException(

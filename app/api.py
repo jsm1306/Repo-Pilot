@@ -4,14 +4,17 @@ import uuid
 import json
 import queue
 import logging
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -30,6 +33,7 @@ from app.auth import (
     public_user,
     require_csrf,
     require_same_origin,
+    allowed_origins,
     set_session_cookies,
     verify_google_credential,
 )
@@ -155,10 +159,24 @@ job_owners: dict[str, uuid.UUID] = {}
 jobs_lock = threading.Lock()
 INDEX_STAGES = ["cloning", "analyzing", "reading", "chunking", "embedding", "storing"]
 logger = logging.getLogger(__name__)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+FRONTEND_ROOT = PROJECT_ROOT / "frontend" / "dist"
+FRONTEND_INDEX = FRONTEND_ROOT / "index.html"
+FRONTEND_ASSETS = FRONTEND_ROOT / "assets"
+FRONTEND_BUILD_AVAILABLE = FRONTEND_INDEX.is_file() and FRONTEND_ASSETS.is_dir()
+
+
+def _production_frontend_required() -> bool:
+    return os.getenv("APP_ENV", "development").strip().lower() == "production"
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
+    if _production_frontend_required() and not FRONTEND_BUILD_AVAILABLE:
+        raise RuntimeError(
+            "The production frontend build is missing. Run `npm run build` in frontend/."
+        )
+    allowed_origins()
     embedder = Embedder()
     embedder.load()
     application.state.embedder = embedder
@@ -169,11 +187,13 @@ async def lifespan(application: FastAPI):
 app = FastAPI(title="RepoPilot API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
+    allow_origins=list(allowed_origins()),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["*"],
 )
+if FRONTEND_BUILD_AVAILABLE:
+    app.mount("/assets", StaticFiles(directory=FRONTEND_ASSETS), name="assets")
 
 
 @app.middleware("http")
@@ -907,4 +927,23 @@ def ask_question(
         relevance_grade=result["relevance_grade"],
         retry_count=result["retry_count"],
         evidence=result["evidence"],
+    )
+
+
+def serve_frontend(frontend_path: str) -> FileResponse:
+    if frontend_path.startswith("api/") or frontend_path == "api":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
+    if not FRONTEND_INDEX.is_file():
+        raise RuntimeError(
+            "The production frontend build is missing. Run `npm run build` in frontend/."
+        )
+    return FileResponse(FRONTEND_INDEX)
+
+
+if FRONTEND_BUILD_AVAILABLE:
+    app.add_api_route(
+        "/{frontend_path:path}",
+        serve_frontend,
+        methods=["GET"],
+        include_in_schema=False,
     )

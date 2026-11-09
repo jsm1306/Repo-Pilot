@@ -6,6 +6,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
+from urllib.parse import urlsplit
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
@@ -41,6 +42,28 @@ def _auth_secret() -> str:
 
 def _cookie_secure() -> bool:
     return os.getenv("REPOPILOT_COOKIE_SECURE", "false").lower() == "true"
+
+
+LOCAL_ORIGINS = frozenset({"http://127.0.0.1:5173", "http://localhost:5173"})
+
+
+def _normalize_origin(origin: str) -> str | None:
+    parsed = urlsplit(origin.strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    if parsed.path not in {"", "/"} or parsed.query or parsed.fragment or parsed.username or parsed.password:
+        return None
+    return f"{parsed.scheme}://{parsed.netloc.lower()}"
+
+
+def allowed_origins() -> frozenset[str]:
+    configured = os.getenv("APP_ORIGIN")
+    if not configured:
+        return LOCAL_ORIGINS
+    normalized = _normalize_origin(configured)
+    if normalized is None:
+        raise RuntimeError("APP_ORIGIN must be an absolute HTTP(S) origin without a path.")
+    return LOCAL_ORIGINS | {normalized}
 
 
 def verify_google_credential(credential: str) -> dict[str, Any]:
@@ -138,11 +161,20 @@ def require_csrf(request: Request) -> None:
 
 def require_same_origin(request: Request) -> None:
     origin = request.headers.get("Origin")
-    if origin and origin not in {"http://127.0.0.1:5173", "http://localhost:5173"}:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": "origin_rejected", "message": "The request origin is not allowed."},
-        )
+    if origin:
+        try:
+            allowed = allowed_origins()
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={"code": "auth_configuration_error", "message": str(exc)},
+            ) from exc
+        normalized = _normalize_origin(origin)
+        if normalized is None or normalized not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "origin_rejected", "message": "The request origin is not allowed."},
+            )
 
 
 def get_current_user(

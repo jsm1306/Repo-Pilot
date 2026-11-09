@@ -1,12 +1,12 @@
 
 from collections.abc import Callable
+import string
 from typing import Any, TypedDict
 from langgraph.graph import StateGraph, START, END
 
 
 class RepoPilotState(TypedDict):
     question: str
-    search_query: str
     context: str
     answer: str
     document_count: int
@@ -27,9 +27,12 @@ Lines: {doc.metadata.get('start_line', '')}-{doc.metadata.get('end_line', '')}
     )
 
 
-class RepoPilotGraph:
-    MAX_RETRIES = 1
+def is_insufficient_evidence(answer: str) -> bool:
+    normalized = answer.strip().rstrip(string.punctuation).strip().casefold()
+    return normalized == "insufficient_evidence"
 
+
+class RepoPilotGraph:
     def __init__(self, retriever, llm):
         self.retriever = retriever
         self.llm = llm
@@ -37,25 +40,11 @@ class RepoPilotGraph:
 
         builder = StateGraph(RepoPilotState)
         builder.add_node("retrieve", self.retrieve)
-        builder.add_node("grade", self.grade_relevance)
-        builder.add_node("rewrite", self.rewrite_question)
-        builder.add_node("generate", self.generate)
-        builder.add_node("fallback", self.fallback)
+        builder.add_node("answer", self.answer)
 
         builder.add_edge(START, "retrieve")
-        builder.add_edge("retrieve", "grade")
-        builder.add_conditional_edges(
-            "grade",
-            self.route_after_grading,
-            {
-                "generate": "generate",
-                "rewrite": "rewrite",
-                "fallback": "fallback"
-            }
-        )
-        builder.add_edge("rewrite", "retrieve")
-        builder.add_edge("generate", END)
-        builder.add_edge("fallback", END)
+        builder.add_edge("retrieve", "answer")
+        builder.add_edge("answer", END)
         self.graph = builder.compile()
 
     def _emit(self, event_type: str, **data: Any) -> None:
@@ -63,23 +52,10 @@ class RepoPilotGraph:
             self._event_callback({"type": event_type, **data})
 
     def retrieve(self, state: RepoPilotState):
-        query = state["search_query"]
+        query = state["question"]
         self._emit("stage", stage="context_retrieved", status="running", message="Retrieving repository context.")
         documents = self.retriever.invoke(query)
         context = format_documents(documents)
-
-        print(f"\n[LangGraph] Search query: {query}")
-        print(f"[LangGraph] Retrieved {len(documents)} chunks")
-
-        for i, doc in enumerate(documents, start=1):
-            print(
-                f"\n--- Chunk {i} ---\n"
-                f"File: {doc.metadata.get('file_path', '')}\n"
-                f"Symbol: {doc.metadata.get('symbol', '')}\n"
-                f"Lines: {doc.metadata.get('start_line', '')}-"
-                f"{doc.metadata.get('end_line', '')}\n"
-                f"{doc.page_content[:500]}"
-            )
 
         evidence = [
             {
@@ -114,10 +90,13 @@ class RepoPilotGraph:
         )
         return result
 
-    def grade_relevance(self, state: RepoPilotState):
-        self._emit("stage", stage="evidence_graded", status="running", message="Grading retrieved evidence.")
+    def answer(self, state: RepoPilotState):
+        self._emit("stage", stage="evidence_graded", status="running", message="Evaluating retrieved evidence.")
         if not state["context"].strip():
-            print("\n[LangGraph] No evidence retrieved")
+            result = {
+                **self.fallback(state),
+                "relevance_grade": "IRRELEVANT",
+            }
             self._emit(
                 "stage",
                 stage="evidence_graded",
@@ -125,96 +104,58 @@ class RepoPilotGraph:
                 message="No evidence was available to grade.",
                 relevance_grade="IRRELEVANT",
             )
-            return {"relevance_grade": "IRRELEVANT"}
+            return result
 
+        self._emit("stage", stage="answer_generated", status="running", message="Generating the answer from repository context.")
         prompt = f"""
-            You are a repository evidence relevance evaluator.
+You are RepoPilot, an AI repository analysis assistant.
 
-            Determine whether the retrieved context contains direct or meaningful
-            evidence that can help answer the original question.
+Answer the user's question using only the repository context below.
+If the context does not contain useful evidence for the question, respond with
+exactly INSUFFICIENT_EVIDENCE and nothing else.
+Never invent repository details or rely on information outside the context.
+Otherwise, answer directly and mention relevant file paths and symbols when possible.
+Do not include a prefix such as "Answer:".
 
-            Return RELEVANT if useful evidence exists.
-            Return IRRELEVANT if the context is unrelated or contains no useful evidence.
+Repository context:
+{state["context"][:12000]}
 
-            Do not answer the question. Evaluate only the evidence.
-
-            Original question:
-            {state["question"]}
-
-            Retrieved context:
-            {state["context"][:12000]}
-
-            Return exactly one word: RELEVANT or IRRELEVANT.
-            """
+User question:
+{state["question"]}
+"""
         response = self.llm.llm.invoke(prompt)
-        result = response.content.strip().upper()
-        grade = (
-            "RELEVANT"
-            if result.startswith("RELEVANT") and not result.startswith("IRRELEVANT")
-            else "IRRELEVANT"
-        )
+        answer = response.content.strip()
 
-        print(f"\n[LangGraph] LLM relevance grade: {grade}")
+        if is_insufficient_evidence(answer) or not answer:
+            result = self.fallback(state)
+            result["relevance_grade"] = "IRRELEVANT"
+            self._emit(
+                "stage",
+                stage="evidence_graded",
+                status="completed",
+                message="Evidence was insufficient to answer the question.",
+                relevance_grade="IRRELEVANT",
+            )
+            self._emit(
+                "stage",
+                stage="answer_generated",
+                status="completed",
+                message="Fallback answer generated.",
+            )
+            return result
+
         self._emit(
             "stage",
             stage="evidence_graded",
             status="completed",
-            message=f"Evidence graded {grade.lower()}.",
-            relevance_grade=grade,
+            message="Evidence was sufficient to answer the question.",
+            relevance_grade="RELEVANT",
         )
-        return {"relevance_grade": grade}
-
-    def route_after_grading(self, state: RepoPilotState):
-        if state["relevance_grade"] == "RELEVANT":
-            print("[LangGraph] Relevant evidence -> Generate")
-            return "generate"
-
-        if state["retry_count"] < self.MAX_RETRIES:
-            print("[LangGraph] Irrelevant evidence -> Rewrite and retry")
-            return "rewrite"
-
-        print("[LangGraph] Retry exhausted -> Fallback")
-        return "fallback"
-
-    def rewrite_question(self, state: RepoPilotState):
-        self._emit("stage", stage="query_rewritten", status="running", message="Refining the repository search query.")
-        prompt = f"""
-            You are improving search queries for a code repository retrieval system.
-
-            Rewrite the user's question into a concise query that is more likely to
-            retrieve relevant source code, symbols, filenames, or documentation.
-
-            Preserve the user's intent. Add useful technical terms only when justified.
-            Do not answer the question. Return only the rewritten search query.
-
-            Original question:
-            {state["question"]}
-
-            Previous search query:
-            {state["search_query"]}
-            """
-        response = self.llm.llm.invoke(prompt)
-        rewritten = response.content.strip().strip('"')
-
-        if not rewritten:
-            rewritten = state["question"]
-
-        print(f"[LangGraph] Rewritten query: {rewritten}")
-        result = {
-            "search_query": rewritten,
-            "retry_count": state["retry_count"] + 1
-        }
-        self._emit("stage", stage="query_rewritten", status="completed", message="Search query refined.")
-        return result
-
-    def generate(self, state: RepoPilotState):
-        self._emit("stage", stage="answer_generated", status="running", message="Generating the answer from repository context.")
-        response = self.llm.chain.invoke({
-            "question": state["question"],
-            "context": state["context"]
-        })
         self._emit("stage", stage="answer_generated", status="completed", message="Answer generated.")
-        return {"answer": response}
+        return {
+            "answer": answer,
+            "relevance_grade": "RELEVANT",
+        }
 
     def fallback(self, state: RepoPilotState):
         answer = (
@@ -239,7 +180,6 @@ class RepoPilotGraph:
         self._emit("stage", stage="question_received", status="completed", message="Question received.")
         result = self.graph.invoke({
             "question": question,
-            "search_query": question,
             "context": "",
             "answer": "",
             "document_count": 0,

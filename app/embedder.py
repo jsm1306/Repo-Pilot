@@ -3,11 +3,12 @@ class Embedder:
         self.model_name=model_name
         self.model=None
 
-    def _load_model(self):
+    def load(self):
+        """Load the embedding model if it has not been loaded already."""
         if self.model is None:
             from sentence_transformers import SentenceTransformer
             self.model=SentenceTransformer(self.model_name)
 
-    def embed(self,texts):
-        self._load_model()
+    def embed(self, texts):
+        self.load()
         return self.model.encode(texts,convert_to_numpy=True)

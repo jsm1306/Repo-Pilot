@@ -1,11 +1,15 @@
 
 from sqlalchemy import delete, select
+from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.db_models import RepositoryChunk
 
 
 class VectorStore:
     """PostgreSQL + pgvector-backed repository vector storage."""
+
+    def __init__(self, session: Session | None = None):
+        self.session = session
 
     def add_chunks(self,chunks,embeddings,repository_name,user_id=None,repository_id=None,):
         if user_id is None or repository_id is None:
@@ -79,7 +83,15 @@ class VectorStore:
 
         statement = (
             select(
-                RepositoryChunk,
+                RepositoryChunk.content,
+                RepositoryChunk.file_path,
+                RepositoryChunk.language,
+                RepositoryChunk.start_line,
+                RepositoryChunk.end_line,
+                RepositoryChunk.symbol,
+                RepositoryChunk.symbol_type,
+                RepositoryChunk.user_id,
+                RepositoryChunk.repository_id,
                 RepositoryChunk.embedding.cosine_distance(query_vector).label(
                     "distance"
                 ),
@@ -92,30 +104,33 @@ class VectorStore:
             .limit(n_results)
         )
 
-        with SessionLocal() as session:
-            results = session.execute(statement).all()
+        if getattr(self, "session", None) is None:
+            with SessionLocal() as session:
+                results = session.execute(statement).all()
+        else:
+            results = self.session.execute(statement).all()
 
         documents = []
         metadatas = []
         distances = []
 
-        for chunk, distance in results:
-            documents.append(chunk.content)
+        for row in results:
+            documents.append(row.content)
             metadatas.append(
                 {
                     "repository": repository_name or "",
                     "storage_scope": "scoped",
-                    "file_path": chunk.file_path,
-                    "language": chunk.language,
-                    "start_line": chunk.start_line,
-                    "end_line": chunk.end_line,
-                    "symbol": chunk.symbol or "",
-                    "symbol_type": chunk.symbol_type or "",
-                    "user_id": str(chunk.user_id),
-                    "repository_id": str(chunk.repository_id),
+                    "file_path": row.file_path,
+                    "language": row.language,
+                    "start_line": row.start_line,
+                    "end_line": row.end_line,
+                    "symbol": row.symbol or "",
+                    "symbol_type": row.symbol_type or "",
+                    "user_id": str(row.user_id),
+                    "repository_id": str(row.repository_id),
                 }
             )
-            distances.append(float(distance))
+            distances.append(float(row.distance))
 
         # Preserve the result shape expected by the existing
         # LangChain retriever and repository search tools.
